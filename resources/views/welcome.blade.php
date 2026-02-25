@@ -33,10 +33,12 @@
 <body>
     <div class="container my-4 my-md-5">
         @if($is_admin)
-        <div class="position-absolute top-0 end-0 p-3">
-            <a href="{{ route('templates.index') }}" class="btn btn-outline-white">
-                <i class="bi bi-card-list"></i> Gestisci Template
-            </a>
+        {{-- Gestione responsiva del bottone per evitare sovrapposizioni su mobile --}}
+        <div class="text-center mb-4 d-md-none"> {{-- Visibile solo su mobile (<md) --}}
+            <a href="{{ route('templates.index') }}" class="btn btn-outline-white"><i class="bi bi-card-list"></i> Gestisci Template</a>
+        </div>
+        <div class="position-absolute top-0 end-0 p-3 d-none d-md-block"> {{-- Visibile solo su desktop (>=md) --}}
+            <a href="{{ route('templates.index') }}" class="btn btn-outline-white"><i class="bi bi-card-list"></i> Gestisci Template</a>
         </div>
         @endif
         <header class="mb-5 text-center">
