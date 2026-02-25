@@ -1,0 +1,33 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\CampaignController;
+use App\Http\Controllers\TemplateController;
+
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register web routes for your application. These
+| routes are loaded by the RouteServiceProvider and all of them will
+| be assigned to the "web" middleware group. Make something great!
+|
+*/
+
+// Rotta per mostrare il form di creazione campagna (associata al metodo create)
+Route::get('/', [CampaignController::class, 'create'])->name('campaigns.create');
+
+// Rotta per salvare i dati della campagna (associata al metodo store)
+Route::post('/campaigns', [CampaignController::class, 'store'])->name('campaigns.store');
+
+// Rotta per lo step 2 della creazione campagna (anteprima/mapping)
+Route::get('/campaigns/step2', [CampaignController::class, 'step2'])->name('campaigns.step2');
+
+// Rotta per l'invio del messaggio di test (chiamata via Fetch API)
+Route::post('/campaigns/send-test', [CampaignController::class, 'sendTest'])->name('campaigns.sendTest');
+
+// Rotte per la gestione dei template (sezione admin)
+Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
+Route::get('/templates/create', [TemplateController::class, 'create'])->name('templates.create');
+Route::post('/templates', [TemplateController::class, 'store'])->name('templates.store');

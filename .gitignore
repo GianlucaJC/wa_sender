@@ -1,0 +1,19 @@
+# Compiled source
+/public/hot
+/public/storage
+/public/build
+
+# Dependencies
+/node_modules
+/vendor
+
+# Environment files
+.env
+.env.backup
+.env.testing
+
+# Log and cache files
+/storage/framework/cache/
+/storage/logs/
+*.log
+.phpunit.result.cache
