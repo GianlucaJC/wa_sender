@@ -55,24 +55,23 @@
                         <div class="accordion-body">
                             <p>Nella pagina principale, compila i seguenti campi:</p>
                             <ul>
-                                <li><strong>Nome Campagna:</strong> Un nome a tua scelta per riconoscere l'invio (es. "Invito Assemblea Giugno 2024"). Non verrà visto dai destinatari.</li>
+                                <li><strong>Nome Campagna:</strong> Un nome a tua scelta per riconoscere l'invio (es. "Invito Assemblea Giugno 2024"). Questo nome non sarà visibile ai destinatari.</li>
                                 <li>
-                                    <strong>Modalità di Invio Destinatari:</strong> Scegli da dove prendere i numeri di telefono. La modalità più comune è <strong>"Da file Excel/CSV"</strong>.
+                                    <strong>Modalità di Invio Destinatari:</strong> Scegli da dove prendere i numeri di telefono. La modalità più comune è <strong>"Da file Excel/CSV"</strong>. Selezionando questa opzione, apparirà la sezione per il caricamento.
                                 </li>
                                 <li>
-                                    <strong>Carica File Destinatari:</strong> Se hai scelto "Da file", qui devi caricare il tuo file.
+                                    <strong>Template Messaggio Approvato:</strong> Scegli dall'elenco il messaggio che vuoi inviare. <strong>La scelta è obbligatoria.</strong> Questi sono messaggi pre-approvati da WhatsApp. Se il template contiene delle variabili (es. <code>Ciao {{1}}...</code>), il sistema le sostituirà automaticamente con i dati presi dal tuo file (es. il nome della persona).
+                                </li>
+                                <li>
+                                    <strong>Carica File Destinatari:</strong> Se hai scelto "Da file", clicca per selezionare il tuo file. Il caricamento partirà automaticamente e vedrai una barra di avanzamento.
                                     <div class="alert alert-warning mt-2">
                                         <strong>Attenzione:</strong> Il file deve essere in formato <strong>CSV</strong> con il <strong>punto e virgola (;)</strong> come separatore. La prima riga deve contenere i nomi delle colonne (es. <code>Nome;Cognome;Cellulare</code>).
                                     </div>
                                 </li>
                                 <li>
-                                    <strong>Template Messaggio Approvato:</strong> Scegli dall'elenco il messaggio che vuoi inviare. Questi sono messaggi pre-approvati da WhatsApp. Se il template contiene delle variabili (es. <code>Ciao {{1}}...</code>), il sistema le sostituirà automaticamente con i dati presi dal tuo file (es. il nome della persona).
-                                </li>
-                                <li>
                                     <strong>Invio Test Singolo:</strong> Prima di avviare la campagna, puoi inviare un messaggio di prova a un tuo numero per verificare che tutto sia corretto.
                                 </li>
                             </ul>
-                            <p>Una volta compilato tutto, clicca su <strong>"Crea e Visualizza Destinatari"</strong> per passare allo step successivo.</p>
                         </div>
                     </div>
                 </div>
@@ -81,21 +80,32 @@
                 <div class="accordion-item">
                     <h2 class="accordion-header" id="headingStep2">
                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseStep2" aria-expanded="false" aria-controls="collapseStep2">
-                            <i class="bi bi-2-circle-fill me-2"></i> Step 2: Mappatura e Avvio
+                            <i class="bi bi-2-circle-fill me-2"></i> Step 2: Mappatura e Validazione del File
                         </button>
                     </h2>
                     <div id="collapseStep2" class="accordion-collapse collapse" aria-labelledby="headingStep2" data-bs-parent="#docsAccordion">
                         <div class="accordion-body">
-                            <p>In questa schermata devi "mappare" i campi, cioè dire al sistema quale colonna del tuo file corrisponde a quale informazione.</p>
+                            <p>Dopo il caricamento del file, si aprirà una serie di finestre (modali) per guidarti.</p>
+                            <h5>2.1 - Mappatura Colonne</h5>
+                            <p>Nella prima finestra, devi "mappare" i campi, cioè dire al sistema quale colonna del tuo file corrisponde a quale informazione.</p>
                             <ul>
                                 <li>
-                                    <strong>Campo "Nominativo":</strong> Seleziona la colonna del tuo file che contiene il nome della persona (es. "Nome" o "Nominativo"). Questo verrà usato per personalizzare il messaggio se il template lo prevede.
+                                    <strong>Campo "Nominativo":</strong> Seleziona la colonna che contiene il nome della persona (es. "Nome").
                                 </li>
                                 <li>
-                                    <strong>Campo "Numero Cellulare":</strong> <span class="text-danger fw-bold">Questo è il campo più importante.</span> Seleziona la colonna che contiene i numeri di cellulare.
+                                    <strong>Campo "Numero Cellulare":</strong> <span class="text-danger fw-bold">Questo è il campo più importante.</span> Seleziona la colonna che contiene i numeri di telefono.
                                 </li>
                             </ul>
-                            <p>Dopo aver associato le colonne, clicca su <strong>"Prosegui e Avvia Campagna"</strong>. L'invio partirà in background.</p>
+                            <p>Una volta fatto, clicca su <strong>"Valida File"</strong>.</p>
+                            <hr class="my-3">
+                            <h5>2.2 - Report di Validazione</h5>
+                            <p>Si aprirà una seconda finestra con un riepilogo dell'analisi del tuo file:</p>
+                            <ul>
+                                <li><strong>Contatti validi:</strong> Il numero di contatti pronti per l'invio.</li>
+                                <li><strong>Contatti corretti:</strong> Numeri che il sistema ha corretto automaticamente (es. aggiungendo +39).</li>
+                                <li><strong>Contatti scartati:</strong> Numeri non validi che verranno ignorati, con il motivo dello scarto.</li>
+                            </ul>
+                            <p>Dopo aver controllato il report, clicca su <strong>"Chiudi"</strong>. Il pulsante <strong>"Avvia Campagna"</strong> in fondo alla pagina principale diventerà attivo.</p>
                         </div>
                     </div>
                 </div>
@@ -104,12 +114,15 @@
                 <div class="accordion-item">
                     <h2 class="accordion-header" id="headingStep3">
                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseStep3" aria-expanded="false" aria-controls="collapseStep3">
-                            <i class="bi bi-3-circle-fill me-2"></i> Step 3: Monitorare l'Avanzamento
+                            <i class="bi bi-3-circle-fill me-2"></i> Step 3: Avvio e Monitoraggio
                         </button>
                     </h2>
                     <div id="collapseStep3" class="accordion-collapse collapse" aria-labelledby="headingStep3" data-bs-parent="#docsAccordion">
                         <div class="accordion-body">
-                            <p>Dopo aver avviato la campagna, verrai reindirizzato alla pagina di avanzamento. Qui puoi vedere in tempo reale:</p>
+                            <h5>3.1 - Avvio della Campagna</h5>
+                            <p>Una volta che il pulsante <strong>"Avvia Campagna"</strong> in fondo alla pagina è attivo, cliccalo. Apparirà una finestra di conferma. Clicca su "Sì, avvia campagna!" per iniziare l'invio.</p>
+                            <h5>3.2 - Monitoraggio dell'Avanzamento</h5>
+                            <p>Dopo la conferma, verrai reindirizzato alla pagina di avanzamento. Qui puoi vedere in tempo reale:</p>
                             <ul>
                                 <li><strong>Stato Campagna:</strong> Indica se la campagna è "In Elaborazione", "Completata" o "Fallita".</li>
                                 <li><strong>Barra di Progresso:</strong> Mostra visivamente quanti messaggi sono stati inviati (in verde) e quanti sono falliti (in rosso).</li>
