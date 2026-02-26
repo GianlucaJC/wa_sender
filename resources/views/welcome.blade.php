@@ -10,6 +10,8 @@
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <style>
         body {
@@ -47,21 +49,10 @@
 
         <main class="card shadow-sm">
             <div class="card-body p-4 p-md-5">
-                <form id="campaignForm" onsubmit="return false;">
+                <form id="campaignForm" action="{{ route('campaigns.launch.unified') }}" method="POST">
                     @csrf
 
-                    @if(session('error'))
-                        <div class="alert alert-danger mb-4">
-                            {{ session('error') }}
-                        </div>
-                    @endif
-
-                    @if ($errors->any())
-                        <div class="alert alert-danger mb-4">
-                            <strong>Attenzione!</strong> Correggi i seguenti errori:
-                            <ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
-                        </div>
-                    @endif
+                    {{-- Session and validation errors will be handled by Swal at the end of the body --}}
 
                     <!-- Nome Campagna -->
                     <div class="mb-4">
@@ -121,9 +112,9 @@
                     <div class="mb-4">
                         <label for="message_template_name" class="form-label">Template Messaggio Approvato</label>
                         <select id="message_template_name" name="message_template" class="form-select form-select-lg" required>
-                            <option value="" @if(!old('message_template') && empty($campaignData['message_template'])) selected @endif disabled>Scegli un template...</option>
+                            <option value="" selected>Scegli un template...</option>
                             @forelse($templates as $template)
-                                <option value="{{ $template['name'] }}" {{ old('message_template', $campaignData['message_template'] ?? null) == $template['name'] ? 'selected' : '' }}>{{ $template['name'] }}</option>
+                                <option value="{{ $template['name'] }}" @if(old('message_template', $campaignData['message_template'] ?? null) == $template['name']) selected @endif>{{ $template['name'] }}</option>
                             @empty
                                 <option value="" disabled>Nessun template approvato trovato.</option>
                             @endforelse
@@ -192,9 +183,10 @@
                     </div>
 
                     <!-- Pulsante di avvio -->
-                    <div class="alert alert-info mt-5">
-                        <i class="bi bi-info-circle-fill"></i>
-                        Per le campagne da file, il pulsante di avvio si troverà nella finestra di validazione dopo aver caricato e mappato il file. Per le altre modalità, verrà mostrato qui un pulsante di avvio.
+                    <div class="d-flex justify-content-end mt-5">
+                        <button type="submit" id="main-launch-button" class="btn btn-primary btn-lg">
+                            <i class="bi bi-send-check"></i> Avvia Campagna
+                        </button>
                     </div>
                 </form>
             </div>
@@ -244,10 +236,8 @@
                         {{-- Content will be injected by JS --}}
                     </div>
                     <div class="modal-footer justify-content-between">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-                        <button type="button" id="launch-campaign-button" class="btn btn-success">
-                            <i class="bi bi-send-check"></i> Conferma e Avvia Invio
-                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                        <span class="form-text">Puoi avviare la campagna usando il pulsante in fondo alla pagina.</span>
                     </div>
                 </div>
             </div>
@@ -281,21 +271,16 @@
             const mappingModal = new bootstrap.Modal(mappingModalEl);
             const validationModalEl = document.getElementById('validationReportModal');
             const validationModal = new bootstrap.Modal(validationModalEl);
+            const mainLaunchButton = document.getElementById('main-launch-button');
 
-            // Helper to show alerts
-            function showAlert(message, type = 'danger') {
-                const alertContainer = document.querySelector('form');
-                const existingAlert = document.getElementById('dynamic-alert');
-                if(existingAlert) existingAlert.remove();
-
-                const alertDiv = document.createElement('div');
-                alertDiv.id = 'dynamic-alert';
-                alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-                alertDiv.setAttribute('role', 'alert');
-                alertDiv.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
-                alertContainer.prepend(alertDiv);
+            // Helper to show alerts using SweetAlert2
+            function showSwalAlert(title, text, icon = 'error') {
+                Swal.fire({
+                    icon: icon,
+                    title: title,
+                    html: text,
+                });
             }
-
             // --- Logica per la selezione della fonte dei destinatari ---
             const recipientSourceRadios = document.querySelectorAll('input[name="recipient_source"]');
             const fileUploadSection = document.getElementById('file_upload_section');
@@ -304,9 +289,12 @@
                 const selectedSource = document.querySelector('input[name="recipient_source"]:checked').value;
                 if (selectedSource === 'file_upload') {
                     fileUploadSection.style.display = 'block';
-                    document.querySelector('#campaignForm').setAttribute('action', 'javascript:void(0);');
+                    mainLaunchButton.disabled = true;
+                    mainLaunchButton.innerHTML = '<i class="bi bi-shield-check"></i> Prima Valida il File';
                 } else {
                     fileUploadSection.style.display = 'none';
+                    mainLaunchButton.disabled = false;
+                    mainLaunchButton.innerHTML = '<i class="bi bi-send-check"></i> Avvia Campagna';
                 }
             };
 
@@ -314,6 +302,8 @@
                 radio.addEventListener('change', toggleFileUploadSection);
             });
             toggleFileUploadSection(); // Esegui al caricamento per impostare lo stato iniziale
+            // Trigger change on template select to show preview for the pre-selected item
+            if (templateSelect.value) templateSelect.dispatchEvent(new Event('change'));
 
 
             templateSelect.addEventListener('change', (event) => {
@@ -426,6 +416,10 @@
                 const file = event.target.files[0];
                 if (!file) return;
 
+                // Reset launch button state
+                mainLaunchButton.disabled = true;
+                mainLaunchButton.innerHTML = '<i class="bi bi-shield-check"></i> Prima Valida il File';
+
                 const formData = new FormData();
                 formData.append('recipient_file', file);
                 formData.append('_token', csrfToken);
@@ -454,13 +448,13 @@
                         mappingModal.show();
                     } else {
                         const error = JSON.parse(xhr.responseText);
-                        showAlert(`<strong>Errore Caricamento:</strong> ${error.message}`);
+                        showSwalAlert('Errore Caricamento', error.message);
                         fileInput.value = '';
                     }
                 };
 
                 xhr.onerror = () => {
-                    showAlert('Errore di rete durante il caricamento del file.');
+                    showSwalAlert('Errore di Rete', 'Si è verificato un errore di rete durante il caricamento del file.');
                     progressContainer.style.display = 'none';
                 };
 
@@ -487,7 +481,11 @@
                 const filePath = filePathInput.value;
 
                 if (!mapName || !mapPhone) {
-                    alert('Seleziona entrambe le colonne per il mapping.');
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Campi Mancanti',
+                        text: 'Seleziona entrambe le colonne per il mapping prima di procedere.',
+                    });
                     return;
                 }
 
@@ -507,7 +505,7 @@
                     populateValidationModal(result.report);
                     validationModal.show();
                 } catch (error) {
-                    showAlert(`<strong>Errore Validazione:</strong> ${error.message}`);
+                    showSwalAlert('Errore Validazione', error.message);
                 } finally {
                     button.disabled = false;
                     button.innerHTML = '<i class="bi bi-shield-check"></i> Valida File';
@@ -535,43 +533,60 @@
                     </ul>
                     ${invalidTable}`;
                 
-                const launchButton = document.getElementById('launch-campaign-button');
-                launchButton.innerHTML = `<i class="bi bi-send-check"></i> Conferma e Avvia Invio a ${report.valid_count} Contatti`;
-                launchButton.disabled = report.valid_count === 0;
+                mainLaunchButton.disabled = report.valid_count === 0;
+                mainLaunchButton.innerHTML = `<i class="bi bi-send-check"></i> Avvia Campagna per ${report.valid_count} Contatti`;
             }
 
-            document.getElementById('launch-campaign-button').addEventListener('click', async function() {
-                const button = this;
-                const campaignName = document.getElementById('campaign_name').value;
-                const messageTemplate = document.getElementById('message_template_name').value;
+            // --- Gestione Avvio Campagna con Conferma ---
+            const campaignForm = document.getElementById('campaignForm');
+            campaignForm.addEventListener('submit', function(event) {
+                event.preventDefault(); // Blocca l'invio standard del form
 
-                if (!campaignName || !messageTemplate) {
-                    validationModal.hide();
-                    showAlert('<strong>Errore:</strong> Compila il "Nome Campagna" e scegli un "Template Messaggio" prima di avviare.');
-                    window.scrollTo(0, 0);
-                    return;
-                }
+                const launchButton = document.getElementById('main-launch-button');
+                const recipientCountText = launchButton.textContent.match(/\d+/);
+                const recipientCount = recipientCountText ? parseInt(recipientCountText[0], 10) : 'diversi';
 
-                button.disabled = true;
-                button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Avvio in corso...';
-
-                try {
-                    const response = await fetch('{{ route("campaigns.ajax.launch") }}', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                        body: JSON.stringify({ campaign_name: campaignName, message_template: messageTemplate })
-                    });
-                    const result = await response.json();
-                    if (!response.ok) throw new Error(result.message);
-
-                    window.location.href = result.redirect_url;
-                } catch (error) {
-                    validationModal.hide();
-                    showAlert(`<strong>Errore Avvio Campagna:</strong> ${error.message}`);
-                    button.disabled = false;
-                    // Il testo del bottone viene ripristinato quando la modale viene ripopolata
-                }
+                Swal.fire({
+                    title: 'Sei sicuro?',
+                    text: `Stai per avviare una campagna per ${recipientCount} destinatari. L'azione non è reversibile.`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Sì, avvia campagna!',
+                    cancelButtonText: 'Annulla'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        launchButton.disabled = true;
+                        launchButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Avvio in corso...`;
+                        campaignForm.submit(); // Invia il form
+                    }
+                });
             });
+
+            @if(session('error'))
+            Swal.fire({
+                icon: 'error',
+                title: 'Attenzione!',
+                text: "{{ session('error') }}"
+            });
+            @endif
+
+            @if ($errors->any())
+                (function() {
+                    let errorHtml = '<ul class="list-unstyled text-start">';
+                    @foreach ($errors->all() as $error)
+                        errorHtml += '<li>- {{ $error }}</li>';
+                    @endforeach
+                    errorHtml += '</ul>';
+
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Errore di Validazione',
+                        html: errorHtml,
+                    });
+                })();
+            @endif
         });
     </script>
 </body>

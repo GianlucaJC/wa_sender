@@ -33,10 +33,12 @@ Route::post('/campaigns/validate', [CampaignController::class, 'validateFile'])-
 // Rotta per avviare la campagna dopo la validazione
 Route::post('/campaigns/launch', [CampaignController::class, 'launchCampaign'])->name('campaigns.launch');
 
+// Rotta unificata per l'avvio della campagna
+Route::post('/campaigns/launch-unified', [CampaignController::class, 'launchUnified'])->name('campaigns.launch.unified');
+
 // Nuove rotte AJAX per il flusso di upload da file
 Route::post('/campaigns/ajax-upload', [CampaignController::class, 'ajaxUpload'])->name('campaigns.ajax.upload');
 Route::post('/campaigns/ajax-validate', [CampaignController::class, 'ajaxValidate'])->name('campaigns.ajax.validate');
-Route::post('/campaigns/ajax-launch', [CampaignController::class, 'ajaxLaunch'])->name('campaigns.ajax.launch');
 
 // Rotte per il monitoraggio della campagna
 Route::get('/campaigns/{campaign}/progress', [CampaignController::class, 'showProgress'])->name('campaigns.progress');

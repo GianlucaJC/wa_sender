@@ -654,45 +654,51 @@ class CampaignController extends Controller
     }
 
     /**
-     * Avvia la campagna via AJAX usando i dati dalla richiesta e dalla sessione.
+     * Gestisce l'avvio unificato della campagna dal form principale.
      *
      * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\RedirectResponse
      */
-    public function ajaxLaunch(Request $request)
+    public function launchUnified(Request $request)
     {
         $validated = $request->validate([
             'campaign_name' => 'required|string|max:255',
             'message_template' => 'required|string',
+            'recipient_source' => 'required|in:fillea_tabulato,assemblea_generale,organismi_dirigenti,file_upload',
         ]);
 
-        $validatedRecipients = $request->session()->get('validated_recipients');
+        if ($validated['recipient_source'] === 'file_upload') {
+            $validatedRecipients = $request->session()->get('validated_recipients');
 
-        if (empty($validatedRecipients)) {
-            return response()->json(['success' => false, 'message' => 'Nessun destinatario valido trovato in sessione. Riprova il processo di validazione.'], 400);
-        }
+            if (empty($validatedRecipients)) {
+                return back()->with('error', 'Nessun destinatario valido trovato. Esegui nuovamente il processo di caricamento e validazione del file.')->withInput();
+            }
 
-        $campaign = Campaign::create([
-            'name' => $validated['campaign_name'],
-            'message_template' => $validated['message_template'],
-            'status' => 'pending',
-            'total_recipients' => count($validatedRecipients),
-        ]);
-
-        foreach ($validatedRecipients as $rec) {
-            $recipient = CampaignRecipient::create([
-                'campaign_id' => $campaign->id,
-                'phone_number' => $rec['phone_number'],
-                'name' => $rec['name'],
-                'params' => ['name' => $rec['name']],
-                'status' => 'queued',
+            $campaign = Campaign::create([
+                'name' => $validated['campaign_name'],
+                'message_template' => $validated['message_template'],
+                'status' => 'pending',
+                'total_recipients' => count($validatedRecipients),
             ]);
-            SendWhatsAppMessage::dispatch($recipient);
+
+            foreach ($validatedRecipients as $rec) {
+                $recipient = CampaignRecipient::create([
+                    'campaign_id' => $campaign->id,
+                    'phone_number' => $rec['phone_number'],
+                    'name' => $rec['name'],
+                    'params' => ['name' => $rec['name']],
+                    'status' => 'queued',
+                ]);
+                SendWhatsAppMessage::dispatch($recipient);
+            }
+
+            $campaign->update(['status' => 'processing']);
+            $request->session()->forget('validated_recipients');
+
+            return redirect()->route('campaigns.progress', $campaign->id);
+        } else {
+            // Logica per le altre fonti di destinatari (da implementare)
+            return back()->with('error', 'La modalità di invio selezionata non è ancora stata implementata.')->withInput();
         }
-
-        $campaign->update(['status' => 'processing']);
-        $request->session()->forget('validated_recipients');
-
-        return response()->json(['success' => true, 'redirect_url' => route('campaigns.progress', $campaign->id)]);
     }
 }
