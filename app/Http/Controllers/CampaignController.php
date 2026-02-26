@@ -379,6 +379,16 @@ class CampaignController extends Controller
     }
 
     /**
+     * Mostra la pagina della documentazione.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function showDocs()
+    {
+        return view('docs.index');
+    }
+
+    /**
      * Invia un messaggio di test a un singolo destinatario accodando un job.
      *
      * @param  \Illuminate\Http\Request  $request

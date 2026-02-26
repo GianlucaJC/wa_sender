@@ -38,6 +38,7 @@
         </header>
 
         <div class="text-center mb-4">
+            <a href="{{ route('docs.index') }}" class="btn btn-outline-white"><i class="bi bi-question-circle"></i> Guida Utente</a>
             <a href="{{ route('campaigns.index') }}" class="btn btn-outline-white"><i class="bi bi-archive"></i> Storico Campagne</a>
             @if($is_admin)
             <a href="{{ route('templates.index') }}" class="btn btn-outline-white"><i class="bi bi-card-list"></i> Gestisci Template</a>
@@ -125,7 +126,7 @@
                     </div>
 
                     <!-- Allegati -->
-                    <div class="mb-4">
+                    <div class="mb-4" style='display:none'>
                         <label for="attachment_link" class="form-label">Link da allegare (opzionale)</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
@@ -134,7 +135,7 @@
                         <div class="form-text mt-2">Il link verrà usato se il template lo prevede (es. in un pulsante o come variabile).</div>
                     </div>
 
-                    <div class="mb-4">
+                    <div class="mb-4" style='display:none'>
                         <label for="attachment_pdf" class="form-label">PDF da allegare (opzionale)</label>
                         <input class="form-control form-control-lg" type="file" id="attachment_pdf" name="attachment_pdf" accept="application/pdf">
                         <div class="form-text mt-2">Il PDF verrà inviato come documento se il template selezionato ha un header di tipo "Documento".</div>

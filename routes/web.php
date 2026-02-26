@@ -34,6 +34,9 @@ Route::post('/campaigns/map', [CampaignController::class, 'processMapping'])->na
 Route::get('/campaigns/{campaign}/progress', [CampaignController::class, 'showProgress'])->name('campaigns.progress');
 Route::get('/campaigns/{campaign}/status', [CampaignController::class, 'getStatus'])->name('campaigns.status');
 
+// Rotta per la documentazione
+Route::get('/docs', [CampaignController::class, 'showDocs'])->name('docs.index');
+
 // Rotta per l'invio del messaggio di test (chiamata via Fetch API)
 Route::post('/campaigns/send-test', [CampaignController::class, 'sendTest'])->name('campaigns.sendTest');
 
