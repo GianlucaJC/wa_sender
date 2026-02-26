@@ -544,4 +544,155 @@ class CampaignController extends Controller
             return response()->json(['message' => 'Impossibile inviare il messaggio di prova. Dettaglio: ' . $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Gestisce l'upload asincrono del file e restituisce gli header.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function ajaxUpload(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            // Usiamo 'mimetypes' per essere più flessibili. Alcuni sistemi operativi
+            // identificano i file CSV come 'text/plain' invece di 'text/csv'.
+            'recipient_file' => 'required|file|max:10240|mimetypes:text/csv,text/plain,application/csv',
+        ], ['recipient_file.mimetypes' => 'Sono ammessi solo file di tipo CSV.']);
+
+        if ($validator->fails()) {
+            return response()->json(['success' => false, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $file = $request->file('recipient_file');
+        $filename = uniqid('file_', true) . '.' . $file->getClientOriginalExtension();
+        $filePath = $file->storeAs('recipient_files', $filename, 'local');
+        $fullPath = storage_path('app/' . $filePath);
+
+        $headers = [];
+        if (($handle = fopen($fullPath, "r")) !== FALSE) {
+            $headerData = fgetcsv($handle, 0, ";");
+            fclose($handle);
+            if ($headerData) {
+                $headers = array_filter($headerData, fn($h) => !is_null($h) && $h !== '');
+            }
+        }
+
+        if (empty($headers)) {
+            Storage::disk('local')->delete($filePath);
+            return response()->json(['success' => false, 'message' => 'Impossibile leggere le intestazioni dal file CSV. Assicurati che usi il punto e virgola (;) come separatore.'], 400);
+        }
+
+        return response()->json([
+            'success' => true,
+            'file_path' => $filePath,
+            'headers' => $headers
+        ]);
+    }
+
+    /**
+     * Valida un file via AJAX, salva i destinatari validi in sessione e restituisce il report.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function ajaxValidate(Request $request)
+    {
+        $validated = $request->validate([
+            'file_path' => 'required|string',
+            'map_name' => 'required|string',
+            'map_phone' => 'required|string',
+        ]);
+
+        $filePath = storage_path('app/' . $validated['file_path']);
+        if (!is_readable($filePath)) {
+            return response()->json(['success' => false, 'message' => 'File non trovato o non leggibile sul server.'], 404);
+        }
+
+        $totalRows = 0;
+        $normalizedCount = 0;
+        $validRecipients = [];
+        $invalidEntries = [];
+
+        $handle = fopen($filePath, "r");
+        $headers = fgetcsv($handle, 0, ";");
+        $nameIndex = array_search($validated['map_name'], $headers);
+        $phoneIndex = array_search($validated['map_phone'], $headers);
+
+        if ($phoneIndex === false) {
+            fclose($handle);
+            return response()->json(['success' => false, 'message' => 'La colonna del telefono mappata non è stata trovata.'], 400);
+        }
+
+        $lineNumber = 1;
+        while (($data = fgetcsv($handle, 0, ";")) !== FALSE) {
+            $lineNumber++;
+            $totalRows++;
+            $phoneNumberRaw = isset($data[$phoneIndex]) ? trim($data[$phoneIndex]) : '';
+            $name = ($nameIndex !== false && isset($data[$nameIndex])) ? trim($data[$nameIndex]) : '';
+            $validationResult = $this->normalizeAndValidatePhoneNumber($phoneNumberRaw);
+
+            if ($validationResult['status'] === 'invalid') {
+                $invalidEntries[] = ['line' => $lineNumber, 'name' => $name, 'phone' => $phoneNumberRaw, 'reason' => $validationResult['reason']];
+            } else {
+                if ($validationResult['status'] === 'normalized') $normalizedCount++;
+                $validRecipients[] = ['name' => $name, 'phone_number' => $validationResult['number']];
+            }
+        }
+        fclose($handle);
+
+        $report = [
+            'total_rows' => $totalRows,
+            'valid_count' => count($validRecipients),
+            'invalid_count' => count($invalidEntries),
+            'normalized_count' => $normalizedCount,
+            'invalid_entries' => $invalidEntries,
+        ];
+
+        $request->session()->put('validated_recipients', $validRecipients);
+
+        return response()->json(['success' => true, 'report' => $report]);
+    }
+
+    /**
+     * Avvia la campagna via AJAX usando i dati dalla richiesta e dalla sessione.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function ajaxLaunch(Request $request)
+    {
+        $validated = $request->validate([
+            'campaign_name' => 'required|string|max:255',
+            'message_template' => 'required|string',
+        ]);
+
+        $validatedRecipients = $request->session()->get('validated_recipients');
+
+        if (empty($validatedRecipients)) {
+            return response()->json(['success' => false, 'message' => 'Nessun destinatario valido trovato in sessione. Riprova il processo di validazione.'], 400);
+        }
+
+        $campaign = Campaign::create([
+            'name' => $validated['campaign_name'],
+            'message_template' => $validated['message_template'],
+            'status' => 'pending',
+            'total_recipients' => count($validatedRecipients),
+        ]);
+
+        foreach ($validatedRecipients as $rec) {
+            $recipient = CampaignRecipient::create([
+                'campaign_id' => $campaign->id,
+                'phone_number' => $rec['phone_number'],
+                'name' => $rec['name'],
+                'params' => ['name' => $rec['name']],
+                'status' => 'queued',
+            ]);
+            SendWhatsAppMessage::dispatch($recipient);
+        }
+
+        $campaign->update(['status' => 'processing']);
+        $request->session()->forget('validated_recipients');
+
+        return response()->json(['success' => true, 'redirect_url' => route('campaigns.progress', $campaign->id)]);
+    }
 }

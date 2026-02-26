@@ -47,7 +47,7 @@
 
         <main class="card shadow-sm">
             <div class="card-body p-4 p-md-5">
-                <form action="{{ route('campaigns.store') }}" method="POST" id="campaignForm" enctype="multipart/form-data">
+                <form id="campaignForm" onsubmit="return false;">
                     @csrf
 
                     @if(session('error'))
@@ -103,10 +103,18 @@
                     <!-- Sezione Upload File (visibile solo se si sceglie l'opzione file) -->
                     <div id="file_upload_section" class="mb-4" style="display: none;">
                         <label for="recipient_file" class="form-label">Carica File Destinatari</label>
-                        <input class="form-control form-control-lg" type="file" id="recipient_file" name="recipient_file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel">
+                        <input class="form-control form-control-lg" type="file" id="recipient_file" name="recipient_file" accept=".csv">
                         <div class="form-text mt-2">
-                            Carica un file con i contatti. Verrà richiesto di mappare le colonne (es. nominativo, cellulare) nel prossimo step.
+                            Il file verrà caricato automaticamente. Sono ammessi solo file CSV con separatore punto e virgola (;).
                         </div>
+                        <!-- Progress Bar -->
+                        <div id="upload-progress-container" class="mt-3" style="display: none;">
+                            <div class="progress" style="height: 20px;">
+                                <div id="upload-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                            </div>
+                        </div>
+                        <!-- Hidden input for file path -->
+                        <input type="hidden" id="recipient_file_path" name="recipient_file_path">
                     </div>
 
                     <!-- Selezione Template -->
@@ -184,14 +192,66 @@
                     </div>
 
                     <!-- Pulsante di avvio -->
-                    <div class="d-flex justify-content-end">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="bi bi-whatsapp"></i> Crea e Visualizza Destinatari
-                        </button>
+                    <div class="alert alert-info mt-5">
+                        <i class="bi bi-info-circle-fill"></i>
+                        Per le campagne da file, il pulsante di avvio si troverà nella finestra di validazione dopo aver caricato e mappato il file. Per le altre modalità, verrà mostrato qui un pulsante di avvio.
                     </div>
                 </form>
             </div>
         </main>
+
+        <!-- Mapping Modal -->
+        <div class="modal fade" id="mappingModal" tabindex="-1" aria-labelledby="mappingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="mappingModalLabel"><i class="bi bi-diagram-3"></i> Mappatura Colonne File</h5>
+                    </div>
+                    <div class="modal-body">
+                        <p>Associa le colonne del tuo file ai campi richiesti per l'invio.</p>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="map_name" class="form-label">Campo "Nominativo"</label>
+                                <select id="map_name" name="map_name" class="form-select" required></select>
+                                <div class="form-text">Questo campo verrà usato per le variabili come <code>{{1}}</code>.</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="map_phone" class="form-label fw-bold">Campo "Numero Cellulare" <span class="text-danger">*</span></label>
+                                <select id="map_phone" name="map_phone" class="form-select" required></select>
+                                <div class="form-text">Questo campo è obbligatorio per l'invio.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="document.getElementById('recipient_file').value = ''">Annulla</button>
+                        <button type="button" id="validate-button" class="btn btn-primary">
+                            <i class="bi bi-shield-check"></i> Valida File
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Validation Report Modal -->
+        <div class="modal fade" id="validationReportModal" tabindex="-1" aria-labelledby="validationReportModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="validationReportModalLabel"><i class="bi bi-check2-circle"></i> Report di Validazione</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="validationReportModalBody">
+                        {{-- Content will be injected by JS --}}
+                    </div>
+                    <div class="modal-footer justify-content-between">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                        <button type="button" id="launch-campaign-button" class="btn btn-success">
+                            <i class="bi bi-send-check"></i> Conferma e Avvia Invio
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <footer class="mt-5 text-center">
             WA Sender v1.0
@@ -203,13 +263,38 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // General elements
             const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
             const popoverList = [...popoverTriggerList].map(popoverTriggerEl => new bootstrap.Popover(popoverTriggerEl));
-
             const templateSelect = document.getElementById('message_template_name');
             const previewBox = document.getElementById('message_preview');
             const defaultPreviewText = previewBox.textContent;
             const templatesData = @json($templates);
+            const csrfToken = document.querySelector('input[name="_token"]').value;
+
+            // AJAX Flow elements
+            const fileInput = document.getElementById('recipient_file');
+            const filePathInput = document.getElementById('recipient_file_path');
+            const progressContainer = document.getElementById('upload-progress-container');
+            const progressBar = document.getElementById('upload-progress-bar');
+            const mappingModalEl = document.getElementById('mappingModal');
+            const mappingModal = new bootstrap.Modal(mappingModalEl);
+            const validationModalEl = document.getElementById('validationReportModal');
+            const validationModal = new bootstrap.Modal(validationModalEl);
+
+            // Helper to show alerts
+            function showAlert(message, type = 'danger') {
+                const alertContainer = document.querySelector('form');
+                const existingAlert = document.getElementById('dynamic-alert');
+                if(existingAlert) existingAlert.remove();
+
+                const alertDiv = document.createElement('div');
+                alertDiv.id = 'dynamic-alert';
+                alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+                alertDiv.setAttribute('role', 'alert');
+                alertDiv.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
+                alertContainer.prepend(alertDiv);
+            }
 
             // --- Logica per la selezione della fonte dei destinatari ---
             const recipientSourceRadios = document.querySelectorAll('input[name="recipient_source"]');
@@ -219,6 +304,7 @@
                 const selectedSource = document.querySelector('input[name="recipient_source"]:checked').value;
                 if (selectedSource === 'file_upload') {
                     fileUploadSection.style.display = 'block';
+                    document.querySelector('#campaignForm').setAttribute('action', 'javascript:void(0);');
                 } else {
                     fileUploadSection.style.display = 'none';
                 }
@@ -228,6 +314,7 @@
                 radio.addEventListener('change', toggleFileUploadSection);
             });
             toggleFileUploadSection(); // Esegui al caricamento per impostare lo stato iniziale
+
 
             templateSelect.addEventListener('change', (event) => {
                 const selectedTemplateName = event.target.value;
@@ -262,7 +349,6 @@
             sendTestBtn.addEventListener('click', async () => {
                 const recipient = testRecipientInput.value;
                 const templateName = templateSelect.value;
-                const csrfToken = document.querySelector('input[name="_token"]').value;
 
                 // Validazione input
                 if (!recipient || !templateName) {
@@ -331,6 +417,159 @@
                     // Ripristina il pulsante
                     sendTestBtn.disabled = false;
                     sendTestBtn.innerHTML = `<i class="bi bi-whatsapp"></i> Invia Messaggio di Prova`;
+                }
+            });
+
+            // --- Nuovo Flusso AJAX per Upload File ---
+
+            fileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append('recipient_file', file);
+                formData.append('_token', csrfToken);
+
+                progressContainer.style.display = 'block';
+                progressBar.style.width = '0%';
+                progressBar.textContent = '0%';
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '{{ route("campaigns.ajax.upload") }}', true);
+
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = Math.round((e.loaded / e.total) * 100);
+                        progressBar.style.width = percentComplete + '%';
+                        progressBar.textContent = percentComplete + '%';
+                    }
+                };
+
+                xhr.onload = () => {
+                    setTimeout(() => { progressContainer.style.display = 'none'; }, 1000);
+                    if (xhr.status === 200) {
+                        const response = JSON.parse(xhr.responseText);
+                        filePathInput.value = response.file_path;
+                        populateMappingModal(response.headers);
+                        mappingModal.show();
+                    } else {
+                        const error = JSON.parse(xhr.responseText);
+                        showAlert(`<strong>Errore Caricamento:</strong> ${error.message}`);
+                        fileInput.value = '';
+                    }
+                };
+
+                xhr.onerror = () => {
+                    showAlert('Errore di rete durante il caricamento del file.');
+                    progressContainer.style.display = 'none';
+                };
+
+                xhr.send(formData);
+            });
+
+            function populateMappingModal(headers) {
+                const nameSelect = document.getElementById('map_name');
+                const phoneSelect = document.getElementById('map_phone');
+                const defaultOption = '<option value="" selected disabled>Scegli colonna...</option>';
+                nameSelect.innerHTML = defaultOption;
+                phoneSelect.innerHTML = defaultOption;
+                headers.forEach(header => {
+                    const option = `<option value="${header}">${header}</option>`;
+                    nameSelect.innerHTML += option;
+                    phoneSelect.innerHTML += option;
+                });
+            }
+
+            document.getElementById('validate-button').addEventListener('click', async function() {
+                const button = this;
+                const mapName = document.getElementById('map_name').value;
+                const mapPhone = document.getElementById('map_phone').value;
+                const filePath = filePathInput.value;
+
+                if (!mapName || !mapPhone) {
+                    alert('Seleziona entrambe le colonne per il mapping.');
+                    return;
+                }
+
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validazione...';
+
+                try {
+                    const response = await fetch('{{ route("campaigns.ajax.validate") }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                        body: JSON.stringify({ file_path: filePath, map_name: mapName, map_phone: mapPhone })
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.message);
+
+                    mappingModal.hide();
+                    populateValidationModal(result.report);
+                    validationModal.show();
+                } catch (error) {
+                    showAlert(`<strong>Errore Validazione:</strong> ${error.message}`);
+                } finally {
+                    button.disabled = false;
+                    button.innerHTML = '<i class="bi bi-shield-check"></i> Valida File';
+                }
+            });
+
+            function populateValidationModal(report) {
+                const body = document.getElementById('validationReportModalBody');
+                let invalidTable = '';
+                if (report.invalid_count > 0) {
+                    invalidTable = `<hr><h4 class="h5">Dettaglio Contatti Scartati</h4>
+                        <div class="table-responsive" style="max-height: 200px;">
+                            <table class="table table-sm table-striped">
+                                <thead class="table-light"><tr><th>Riga</th><th>Nome</th><th>Numero</th><th>Motivo</th></tr></thead>
+                                <tbody>${report.invalid_entries.map(e => `<tr><td>${e.line}</td><td>${e.name || '-'}</td><td><code>${e.phone || '(vuoto)'}</code></td><td><small>${e.reason}</small></td></tr>`).join('')}</tbody>
+                            </table>
+                        </div>`;
+                }
+                body.innerHTML = `<h4 class="h5">Riepilogo Scansione</h4>
+                    <p>Sono stati analizzati <strong>${report.total_rows}</strong> contatti.</p>
+                    <ul class="list-group mb-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-center"><div><i class="bi bi-person-check-fill text-success"></i> Contatti validi</div><span class="badge bg-success rounded-pill">${report.valid_count}</span></li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center"><div><i class="bi bi-magic text-info"></i> Contatti corretti</div><span class="badge bg-info rounded-pill">${report.normalized_count}</span></li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center"><div><i class="bi bi-person-x-fill text-danger"></i> Contatti scartati</div><span class="badge bg-danger rounded-pill">${report.invalid_count}</span></li>
+                    </ul>
+                    ${invalidTable}`;
+                
+                const launchButton = document.getElementById('launch-campaign-button');
+                launchButton.innerHTML = `<i class="bi bi-send-check"></i> Conferma e Avvia Invio a ${report.valid_count} Contatti`;
+                launchButton.disabled = report.valid_count === 0;
+            }
+
+            document.getElementById('launch-campaign-button').addEventListener('click', async function() {
+                const button = this;
+                const campaignName = document.getElementById('campaign_name').value;
+                const messageTemplate = document.getElementById('message_template_name').value;
+
+                if (!campaignName || !messageTemplate) {
+                    validationModal.hide();
+                    showAlert('<strong>Errore:</strong> Compila il "Nome Campagna" e scegli un "Template Messaggio" prima di avviare.');
+                    window.scrollTo(0, 0);
+                    return;
+                }
+
+                button.disabled = true;
+                button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Avvio in corso...';
+
+                try {
+                    const response = await fetch('{{ route("campaigns.ajax.launch") }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                        body: JSON.stringify({ campaign_name: campaignName, message_template: messageTemplate })
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.message);
+
+                    window.location.href = result.redirect_url;
+                } catch (error) {
+                    validationModal.hide();
+                    showAlert(`<strong>Errore Avvio Campagna:</strong> ${error.message}`);
+                    button.disabled = false;
+                    // Il testo del bottone viene ripristinato quando la modale viene ripopolata
                 }
             });
         });
