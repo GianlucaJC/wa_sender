@@ -243,12 +243,12 @@ class CampaignController extends Controller
     }
 
     /**
-     * Processa il mapping delle colonne e avvia la campagna da file.
+     * Valida il file dei destinatari, normalizza i numeri e mostra un report.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\RedirectResponse
+     * @return \Illuminate\Http\RedirectResponse|\Illuminate\View\View
      */
-    public function processMapping(Request $request)
+    public function validateFile(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'map_name' => 'required|string',
@@ -266,80 +266,123 @@ class CampaignController extends Controller
             return redirect()->route('campaigns.create')->with('error', 'Sessione della campagna scaduta o non valida.');
         }
 
-        // 1. Crea la Campagna nel database
-        $campaign = Campaign::create([
-            'name' => $campaignData['campaign_name'],
-            'message_template' => $campaignData['message_template'],
-            'status' => 'pending', // Diventerà 'processing' quando i job iniziano
-        ]);
-
-        // 2. Leggi il file e crea i destinatari
         $filePath = storage_path('app/' . $campaignData['recipient_file_path']);
         $mapName = $validated['map_name'];
         $mapPhone = $validated['map_phone'];
-        $totalRecipients = 0;
+
+        $totalRows = 0;
+        $normalizedCount = 0;
+        $validRecipients = [];
+        $invalidEntries = [];
 
         try {
-            // AGGIUNTA DIAGNOSTICA: Verifichiamo che il file esista e sia leggibile prima di procedere.
             if (!is_readable($filePath)) {
-                Log::error("File non trovato o non leggibile nel percorso di storage durante il processamento: {$filePath}");
-                $campaign->update(['status' => 'failed', 'total_recipients' => 0]);
-                return redirect()->route('campaigns.create')->with('error', 'Errore critico: il file dei destinatari non è stato trovato o non è leggibile. Controllare i permessi della cartella `storage/app/recipient_files`.');
+                return redirect()->route('campaigns.create')->with('error', 'Errore critico: il file dei destinatari non è leggibile. Controllare i permessi della cartella `storage`.');
             }
 
             $handle = fopen($filePath, "r");
-            $headers = fgetcsv($handle, 0, ";"); // Leggi e ignora le intestazioni
+            $headers = fgetcsv($handle, 0, ";");
 
-            // Trova gli indici delle colonne
             $nameIndex = array_search($mapName, $headers);
             $phoneIndex = array_search($mapPhone, $headers);
 
             if ($phoneIndex === false) {
-                $campaign->update(['status' => 'failed']);
-                return redirect()->route('campaigns.create')->with('error', 'Errore critico: la colonna del telefono mappata non è stata trovata nel file.');
+                fclose($handle);
+                return redirect()->back()->with('error', 'La colonna del telefono mappata non è stata trovata nel file.')->withInput();
             }
 
+            $lineNumber = 1;
             while (($data = fgetcsv($handle, 0, ";")) !== FALSE) {
-                $phoneNumber = $data[$phoneIndex] ?? null;
-                $name = ($nameIndex !== false) ? ($data[$nameIndex] ?? null) : null;
+                $lineNumber++;
+                $totalRows++;
 
-                if ($phoneNumber) {
-                    // Pulisce il numero di telefono (può essere migliorato)
-                    $phoneNumber = preg_replace('/[^0-9+]/', '', $phoneNumber);
+                $phoneNumberRaw = isset($data[$phoneIndex]) ? trim($data[$phoneIndex]) : '';
+                $name = ($nameIndex !== false && isset($data[$nameIndex])) ? trim($data[$nameIndex]) : '';
 
-                    $recipient = CampaignRecipient::create([
-                        'campaign_id' => $campaign->id,
-                        'phone_number' => $phoneNumber,
+                $validationResult = $this->normalizeAndValidatePhoneNumber($phoneNumberRaw);
+
+                if ($validationResult['status'] === 'invalid') {
+                    $invalidEntries[] = [
+                        'line' => $lineNumber,
                         'name' => $name,
-                        // Grazie al cast nel modello, possiamo passare direttamente un array. Laravel lo codificherà in JSON.
-                        'params' => ['name' => $name],
-                        'status' => 'queued',
-                    ]);
-
-                    // Accoda il job di invio passando il modello del destinatario
-                    SendWhatsAppMessage::dispatch($recipient);
-                    $totalRecipients++;
+                        'phone' => $phoneNumberRaw,
+                        'reason' => $validationResult['reason'],
+                    ];
+                } else {
+                    if ($validationResult['status'] === 'normalized') {
+                        $normalizedCount++;
+                    }
+                    $validRecipients[] = [
+                        'name' => $name,
+                        'phone_number' => $validationResult['number'],
+                    ];
                 }
             }
             fclose($handle);
 
-            // Aggiorna la campagna con il totale e imposta lo stato a 'processing'
-            $campaign->update([
-                'total_recipients' => $totalRecipients,
-                'status' => 'processing'
-            ]);
+            $report = [
+                'total_rows' => $totalRows,
+                'valid_count' => count($validRecipients),
+                'invalid_count' => count($invalidEntries),
+                'normalized_count' => $normalizedCount,
+                'invalid_entries' => $invalidEntries,
+            ];
 
-            // Pulisci i dati dalla sessione
-            $request->session()->forget('campaign_creation_data');
+            // Salva i destinatari validi in sessione per il prossimo step
+            $request->session()->put('validated_recipients', $validRecipients);
 
-            // Reindirizza alla pagina di avanzamento
-            return redirect()->route('campaigns.progress', $campaign->id);
+            // Reindirizza indietro alla pagina step2, passando il report per mostrare il modal
+            return redirect()->route('campaigns.step2')->with('validation_report', $report);
 
         } catch (Throwable $e) {
-            $campaign->update(['status' => 'failed']);
-            Log::error("Errore durante l'elaborazione del file per la campagna {$campaign->id}: " . $e->getMessage());
-            return redirect()->route('campaigns.create')->with('error', 'Si è verificato un errore durante la lettura del file dei destinatari.');
+            Log::error("Errore durante la validazione del file per la campagna: " . $e->getMessage());
+            return redirect()->route('campaigns.create')->with('error', 'Si è verificato un errore imprevisto durante la lettura del file.');
         }
+    }
+
+    /**
+     * Avvia la campagna usando i destinatari validati salvati in sessione.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function launchCampaign(Request $request)
+    {
+        $campaignData = $request->session()->get('campaign_creation_data');
+        $validatedRecipients = $request->session()->get('validated_recipients');
+
+        if (!$campaignData || empty($validatedRecipients)) {
+            return redirect()->route('campaigns.create')->with('error', 'Sessione scaduta o nessun destinatario valido trovato. Riprova.');
+        }
+
+        // 1. Crea la Campagna nel database
+        $campaign = Campaign::create([
+            'name' => $campaignData['campaign_name'],
+            'message_template' => $campaignData['message_template'],
+            'status' => 'pending',
+            'total_recipients' => count($validatedRecipients),
+        ]);
+
+        // 2. Crea i destinatari e accoda i job
+        foreach ($validatedRecipients as $rec) {
+            $recipient = CampaignRecipient::create([
+                'campaign_id' => $campaign->id,
+                'phone_number' => $rec['phone_number'],
+                'name' => $rec['name'],
+                'params' => ['name' => $rec['name']],
+                'status' => 'queued',
+            ]);
+            SendWhatsAppMessage::dispatch($recipient);
+        }
+
+        // 3. Aggiorna lo stato della campagna
+        $campaign->update(['status' => 'processing']);
+
+        // 4. Pulisci la sessione dai dati usati
+        $request->session()->forget(['campaign_creation_data', 'validated_recipients']);
+
+        // 5. Reindirizza alla pagina di avanzamento
+        return redirect()->route('campaigns.progress', $campaign->id);
     }
 
     /**
@@ -389,6 +432,46 @@ class CampaignController extends Controller
     }
 
     /**
+     * Normalizza e valida un numero di telefono.
+     *
+     * @param string $number
+     * @return array
+     */
+    private function normalizeAndValidatePhoneNumber(string $number): array
+    {
+        // 1. Pulisce da spazi e caratteri comuni
+        $cleanedNumber = trim(str_replace([' ', '-', '.', '(', ')', '/'], '', $number));
+
+        if (empty($cleanedNumber)) {
+            return ['status' => 'invalid', 'reason' => 'Numero vuoto'];
+        }
+
+        $isNormalized = false;
+
+        // 2. Normalizzazione prefisso
+        if (str_starts_with($cleanedNumber, '0039')) {
+            $cleanedNumber = '+' . substr($cleanedNumber, 2);
+            $isNormalized = true;
+        } elseif (str_starts_with($cleanedNumber, '39') && strlen($cleanedNumber) > 10) {
+            $cleanedNumber = '+' . $cleanedNumber;
+            $isNormalized = true;
+        } elseif (preg_match('/^3\d{8,9}$/', $cleanedNumber)) { // Cellulare italiano senza prefisso
+            $cleanedNumber = '+39' . $cleanedNumber;
+            $isNormalized = true;
+        }
+
+        // 3. Validazione finale (formato cellulare italiano +393XXXXXXXXX)
+        if (preg_match('/^\+393\d{8,9}$/', $cleanedNumber)) {
+            return [
+                'status' => $isNormalized ? 'normalized' : 'valid',
+                'number' => $cleanedNumber
+            ];
+        }
+
+        return ['status' => 'invalid', 'reason' => 'Formato non riconosciuto o non italiano'];
+    }
+
+    /**
      * Invia un messaggio di test a un singolo destinatario accodando un job.
      *
      * @param  \Illuminate\Http\Request  $request
@@ -402,22 +485,63 @@ class CampaignController extends Controller
         ]);
 
         try {
-            // Invece di inviare direttamente, mettiamo il messaggio in coda.
-            // Questo rende l'applicazione più veloce e resiliente.
-            SendWhatsAppMessage::dispatch($validated['recipient'], $validated['message_template']);
+            $token = config('services.meta_whatsapp.token');
+            $phoneNumberId = config('services.meta_whatsapp.phone_number_id');
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
-            // Log per tracciamento
-            Log::info('Messaggio di test accodato per: ' . $validated['recipient']);
+            if (!$token || !$phoneNumberId) {
+                throw new \Exception('Credenziali WhatsApp non configurate.');
+            }
+
+            // SIMULAZIONE: Se il token è 'SIMULATE', non inviamo realmente ma diamo esito positivo.
+            if ($token === 'SIMULATE') {
+                Log::info('SIMULATED test send to: ' . $validated['recipient']);
+                return response()->json([
+                    'message' => 'Messaggio di prova (simulato) inviato con successo.',
+                    'message_id' => 'simulated_test_' . uniqid()
+                ]);
+            }
+
+            $url = "https://graph.facebook.com/{$apiVersion}/{$phoneNumberId}/messages";
+
+            // Costruisce il payload per un messaggio template di test
+            $payload = [
+                'messaging_product' => 'whatsapp',
+                'to' => $validated['recipient'],
+                'type' => 'template',
+                'template' => [
+                    'name' => $validated['message_template'],
+                    'language' => ['code' => 'it'], // Assumiamo 'it', da rendere configurabile in futuro
+                    'components' => [
+                        [
+                            'type' => 'body',
+                            'parameters' => [
+                                ['type' => 'text', 'text' => 'Test'] // Parametro fittizio per la variabile {{1}}
+                            ]
+                        ]
+                    ]
+                ]
+            ];
+
+            $response = Http::withToken($token)->post($url, $payload);
+
+            if ($response->failed()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['error']['message'] ?? 'Unknown API error';
+                throw new \Exception("Errore API: {$errorMessage}");
+            }
+
+            $messageId = $response->json('messages')[0]['id'] ?? 'N/A';
+            Log::info('Messaggio di test inviato a: ' . $validated['recipient'] . '. Message ID: ' . $messageId);
 
             return response()->json([
-                'message' => 'Messaggio di prova accodato per l\'invio.',
-                'message_id' => 'job_queued' // L'ID reale sarà gestito dal worker
+                'message' => 'Messaggio di prova inviato con successo.',
+                'message_id' => $messageId
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Errore durante l\'accodamento del messaggio di test: ' . $e->getMessage());
-
-            return response()->json(['message' => 'Impossibile accodare il messaggio di prova.'], 500);
+            Log::error('Errore durante l\'invio del messaggio di test: ' . $e->getMessage());
+            return response()->json(['message' => 'Impossibile inviare il messaggio di prova. Dettaglio: ' . $e->getMessage()], 500);
         }
     }
 }

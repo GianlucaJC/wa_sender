@@ -156,6 +156,19 @@
                     <!-- Invio Test -->
                     <div class="mb-5">
                         <h3 class="h5 fw-semibold mb-3">Invio Test Singolo</h3>
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="test_send_method" id="test_method_api" value="api" checked>
+                                <label class="form-check-label" for="test_method_api">Tramite API (Consigliato)</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="test_send_method" id="test_method_web" value="web">
+                                <label class="form-check-label" for="test_method_web">Tramite WhatsApp Web</label>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-link p-0" data-bs-toggle="popover" data-bs-html="true" data-bs-title="Differenza tra le modalità" data-bs-content="<b>Tramite API:</b> Simula un invio reale attraverso il sistema. È il test più affidabile.<br><br><b>Tramite WhatsApp Web:</b> Apre una chat in WhatsApp Web/Desktop con il messaggio pre-compilato. Utile per vedere l'anteprima del testo, ma non testa il sistema di invio.">
+                                <i class="bi bi-info-circle"></i>
+                            </button>
+                        </div>
                         <div class="row g-2 align-items-center">
                             <div class="col-sm">
                                 <label for="test_recipient" class="visually-hidden">Numero di telefono</label>
@@ -190,6 +203,9 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+            const popoverList = [...popoverTriggerList].map(popoverTriggerEl => new bootstrap.Popover(popoverTriggerEl));
+
             const templateSelect = document.getElementById('message_template_name');
             const previewBox = document.getElementById('message_preview');
             const defaultPreviewText = previewBox.textContent;
@@ -248,6 +264,7 @@
                 const templateName = templateSelect.value;
                 const csrfToken = document.querySelector('input[name="_token"]').value;
 
+                // Validazione input
                 if (!recipient || !templateName) {
                     testFeedback.textContent = 'Per favore, inserisci un numero di telefono e seleziona un template.';
                     testFeedback.className = 'form-text mt-2 text-danger';
@@ -255,14 +272,35 @@
                 }
 
                 // UI feedback
+                const selectedMethod = document.querySelector('input[name="test_send_method"]:checked').value;
+
+                if (selectedMethod === 'web') {
+                    const template = templatesData.find(t => t.name === templateName);
+                    if (template) {
+                        const bodyComponent = template.components.find(c => c.type === 'BODY');
+                        if (bodyComponent) {
+                            let messageText = bodyComponent.text.replace(/\{\{(\d+)\}\}/g, '[Variabile $1]');
+                            const encodedMessage = encodeURIComponent(messageText);
+                            // Pulisce il numero da caratteri non numerici per il link wa.me
+                            const cleanRecipient = recipient.replace(/[^0-9]/g, '');
+                            const url = `https://wa.me/${cleanRecipient}?text=${encodedMessage}`;
+                            
+                            window.open(url, '_blank');
+
+                            testFeedback.textContent = `È stata aperta una nuova scheda per inviare il messaggio tramite WhatsApp Web/Desktop.`;
+                            testFeedback.className = 'form-text mt-2 text-info';
+                        }
+                    }
+                    return; // Termina qui per la modalità web
+                }
+
+                // Logica per la modalità API
                 sendTestBtn.disabled = true;
                 sendTestBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Invio in corso...`;
                 testFeedback.textContent = '';
                 testFeedback.className = 'form-text mt-2';
 
                 try {
-                    // Nota: l'endpoint '/campaigns/send-test' deve essere creato nel tuo file di rotte (es. routes/web.php)
-                    // e puntare a un metodo in un controller che gestisca l'invio.
                     const response = await fetch('/campaigns/send-test', {
                         method: 'POST',
                         headers: {
@@ -273,16 +311,13 @@
                         body: JSON.stringify({
                             recipient: recipient,
                             message_template: templateName,
-                            // In futuro, qui potremmo aggiungere i valori per le variabili del template
-                            // es: template_variables: ['Mario', '12345']
                         })
                     });
 
                     const result = await response.json();
 
                     if (response.ok) {
-                        // Messaggio più accurato: il messaggio è stato ACCORDATO, non inviato.
-                        testFeedback.textContent = `Messaggio di prova per ${recipient} accodato con successo. Verrà elaborato a breve. (Rif: ${result.message_id})`;
+                        testFeedback.textContent = `Messaggio di prova per ${recipient} inviato con successo. (Rif: ${result.message_id})`;
                         testFeedback.className = 'form-text mt-2 text-success';
                         testRecipientInput.value = ''; // Pulisce l'input
                     } else {

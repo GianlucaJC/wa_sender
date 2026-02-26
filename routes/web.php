@@ -27,8 +27,11 @@ Route::post('/campaigns', [CampaignController::class, 'store'])->name('campaigns
 // Rotta per lo step 2 della creazione campagna (anteprima/mapping)
 Route::get('/campaigns/step2', [CampaignController::class, 'step2'])->name('campaigns.step2');
 
-// Rotta per processare il mapping del file e avviare la campagna
-Route::post('/campaigns/map', [CampaignController::class, 'processMapping'])->name('campaigns.map');
+// Rotta per validare il file dei destinatari
+Route::post('/campaigns/validate', [CampaignController::class, 'validateFile'])->name('campaigns.validate');
+
+// Rotta per avviare la campagna dopo la validazione
+Route::post('/campaigns/launch', [CampaignController::class, 'launchCampaign'])->name('campaigns.launch');
 
 // Rotte per il monitoraggio della campagna
 Route::get('/campaigns/{campaign}/progress', [CampaignController::class, 'showProgress'])->name('campaigns.progress');

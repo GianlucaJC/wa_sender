@@ -52,7 +52,7 @@
                     </div>
 
                     @if($campaignData['recipient_source'] === 'file_upload')
-                        <form action="{{ route('campaigns.map') }}" method="POST">
+                        <form action="{{ route('campaigns.validate') }}" method="POST">
                             @csrf
                             {{-- SEZIONE MAPPING FILE --}}
                             <div id="file-mapping-section">
@@ -96,8 +96,8 @@
                                 <a href="{{ route('campaigns.create') }}" class="btn btn-secondary">
                                     <i class="bi bi-arrow-left"></i> Modifica Campagna
                                 </a>
-                                <button type="submit" class="btn btn-success btn-lg" @if(!isset($file_headers) || empty($file_headers)) disabled @endif>
-                                    <i class="bi bi-send-check"></i> Prosegui e Avvia Campagna
+                                <button type="submit" class="btn btn-primary btn-lg" @if(!isset($file_headers) || empty($file_headers)) disabled @endif>
+                                    <i class="bi bi-shield-check"></i> Valida Destinatari
                                 </button>
                             </div>
                         </form>
@@ -150,6 +150,75 @@
             </div>
         </main>
 
+        {{-- Modal per il Report di Validazione --}}
+        @if(session('validation_report'))
+            @php($report = session('validation_report'))
+            <div class="modal fade" id="validationReportModal" tabindex="-1" aria-labelledby="validationReportModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="validationReportModalLabel"><i class="bi bi-check2-circle"></i> Report di Validazione</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <h4 class="h5">Riepilogo Scansione File</h4>
+                            <p>Sono stati analizzati <strong>{{ $report['total_rows'] }}</strong> contatti dal tuo file.</p>
+                            <ul class="list-group mb-4">
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div><i class="bi bi-person-check-fill text-success"></i> Contatti validi pronti per l'invio</div>
+                                    <span class="badge bg-success rounded-pill">{{ $report['valid_count'] }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div><i class="bi bi-magic text-info"></i> Contatti corretti automaticamente</div>
+                                    <span class="badge bg-info rounded-pill">{{ $report['normalized_count'] }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div><i class="bi bi-person-x-fill text-danger"></i> Contatti scartati</div>
+                                    <span class="badge bg-danger rounded-pill">{{ $report['invalid_count'] }}</span>
+                                </li>
+                            </ul>
+
+                            @if($report['invalid_count'] > 0)
+                                <hr>
+                                <h4 class="h5">Dettaglio Contatti Scartati</h4>
+                                <div class="table-responsive" style="max-height: 200px;">
+                                    <table class="table table-sm table-striped">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Riga n.</th>
+                                                <th>Nominativo</th>
+                                                <th>Numero Fornito</th>
+                                                <th>Motivo Scarto</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($report['invalid_entries'] as $entry)
+                                            <tr>
+                                                <td>{{ $entry['line'] }}</td>
+                                                <td>{{ $entry['name'] ?: '-' }}</td>
+                                                <td><code>{{ $entry['phone'] ?: '(vuoto)' }}</code></td>
+                                                <td><small>{{ $entry['reason'] }}</small></td>
+                                            </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @endif
+                        </div>
+                        <div class="modal-footer justify-content-between">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                            <form action="{{ route('campaigns.launch') }}" method="POST">
+                                @csrf
+                                <button type="submit" class="btn btn-success" @if($report['valid_count'] == 0) disabled @endif>
+                                    <i class="bi bi-send-check"></i> Conferma e Avvia Invio a {{ $report['valid_count'] }} Contatti
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
+
         <footer class="mt-5 text-center">
             WA Sender v1.0
         </footer>
@@ -157,5 +226,17 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    @if(session('validation_report'))
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const modalEl = document.getElementById('validationReportModal');
+            if (modalEl) {
+                const validationModal = new bootstrap.Modal(modalEl);
+                validationModal.show();
+            }
+        });
+    </script>
+    @endif
 </body>
 </html>
