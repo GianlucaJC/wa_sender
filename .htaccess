@@ -1,0 +1,9 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Riscrive la richiesta per la root del progetto alla cartella /public
+    RewriteRule ^$ public/ [L]
+
+    # Riscrive tutte le altre richieste alla cartella /public
+    RewriteRule (.*) public/$1 [L]
+</IfModule>
