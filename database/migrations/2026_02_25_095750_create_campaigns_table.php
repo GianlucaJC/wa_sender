@@ -13,8 +13,15 @@ return new class extends Migration
     {
         Schema::create('campaigns', function (Blueprint $table) {
             $table->id();
+            $table->string('name');
+            $table->string('message_template');
+            $table->string('status')->default('pending'); // es. pending, processing, completed, failed
+            $table->unsignedInteger('total_recipients')->default(0);
+            $table->unsignedInteger('processed_count')->default(0);
+            $table->unsignedInteger('failed_count')->default(0);
             $table->timestamps();
         });
+
     }
 
     /**

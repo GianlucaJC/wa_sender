@@ -32,24 +32,28 @@
 </head>
 <body>
     <div class="container my-4 my-md-5">
-        @if($is_admin)
-        {{-- Gestione responsiva del bottone per evitare sovrapposizioni su mobile --}}
-        <div class="text-center mb-4 d-md-none"> {{-- Visibile solo su mobile (<md) --}}
-            <a href="{{ route('templates.index') }}" class="btn btn-outline-white"><i class="bi bi-card-list"></i> Gestisci Template</a>
-        </div>
-        <div class="position-absolute top-0 end-0 p-3 d-none d-md-block"> {{-- Visibile solo su desktop (>=md) --}}
-            <a href="{{ route('templates.index') }}" class="btn btn-outline-white"><i class="bi bi-card-list"></i> Gestisci Template</a>
-        </div>
-        @endif
         <header class="mb-5 text-center">
             <h1 class="display-5 fw-bold"><i class="bi bi-whatsapp"></i> FilleaOFFICE WhatsApp</h1>
             <p class="lead">Configura i dettagli della tua campagna di messaggistica massiva.</p>
         </header>
 
+        <div class="text-center mb-4">
+            <a href="{{ route('campaigns.index') }}" class="btn btn-outline-white"><i class="bi bi-archive"></i> Storico Campagne</a>
+            @if($is_admin)
+            <a href="{{ route('templates.index') }}" class="btn btn-outline-white"><i class="bi bi-card-list"></i> Gestisci Template</a>
+            @endif
+        </div>
+
         <main class="card shadow-sm">
             <div class="card-body p-4 p-md-5">
                 <form action="{{ route('campaigns.store') }}" method="POST" id="campaignForm" enctype="multipart/form-data">
                     @csrf
+
+                    @if(session('error'))
+                        <div class="alert alert-danger mb-4">
+                            {{ session('error') }}
+                        </div>
+                    @endif
 
                     @if ($errors->any())
                         <div class="alert alert-danger mb-4">
@@ -61,7 +65,7 @@
                     <!-- Nome Campagna -->
                     <div class="mb-4">
                         <label for="campaign_name" class="form-label">Nome Campagna</label>
-                        <input type="text" id="campaign_name" name="campaign_name" class="form-control form-control-lg" placeholder="Es: Promozione Estiva" value="{{ old('campaign_name') }}" required>
+                        <input type="text" id="campaign_name" name="campaign_name" class="form-control form-control-lg" placeholder="Es: Promozione Estiva" value="{{ old('campaign_name', $campaignData['campaign_name'] ?? '') }}" required>
                     </div>
 
                     <!-- Tipologia di Invio -->
@@ -69,25 +73,25 @@
                         <label class="form-label fw-semibold">Modalità di Invio Destinatari</label>
                         <div class="card card-body bg-body">
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="recipient_source" id="source_fillea" value="fillea_tabulato" {{ old('recipient_source', 'fillea_tabulato') == 'fillea_tabulato' ? 'checked' : '' }}>
+                                <input class="form-check-input" type="radio" name="recipient_source" id="source_fillea" value="fillea_tabulato" {{ old('recipient_source', $campaignData['recipient_source'] ?? 'fillea_tabulato') == 'fillea_tabulato' ? 'checked' : '' }}>
                                 <label class="form-check-label" for="source_fillea">
                                     Attivi iscritti FILLEA da tabulato
                                 </label>
                             </div>
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="recipient_source" id="source_assemblea" value="assemblea_generale" {{ old('recipient_source') == 'assemblea_generale' ? 'checked' : '' }}>
+                                <input class="form-check-input" type="radio" name="recipient_source" id="source_assemblea" value="assemblea_generale" {{ old('recipient_source', $campaignData['recipient_source'] ?? null) == 'assemblea_generale' ? 'checked' : '' }}>
                                 <label class="form-check-label" for="source_assemblea">
                                     Assemblea generale / Comitato direttivo
                                 </label>
                             </div>
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="recipient_source" id="source_organismi" value="organismi_dirigenti" {{ old('recipient_source') == 'organismi_dirigenti' ? 'checked' : '' }}>
+                                <input class="form-check-input" type="radio" name="recipient_source" id="source_organismi" value="organismi_dirigenti" {{ old('recipient_source', $campaignData['recipient_source'] ?? null) == 'organismi_dirigenti' ? 'checked' : '' }}>
                                 <label class="form-check-label" for="source_organismi">
                                     Organismi dirigenti della tua struttura
                                 </label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="recipient_source" id="source_file" value="file_upload" {{ old('recipient_source') == 'file_upload' ? 'checked' : '' }}>
+                                <input class="form-check-input" type="radio" name="recipient_source" id="source_file" value="file_upload" {{ old('recipient_source', $campaignData['recipient_source'] ?? null) == 'file_upload' ? 'checked' : '' }}>
                                 <label class="form-check-label" for="source_file">
                                     Da file Excel/CSV
                                 </label>
@@ -108,9 +112,9 @@
                     <div class="mb-4">
                         <label for="message_template_name" class="form-label">Template Messaggio Approvato</label>
                         <select id="message_template_name" name="message_template" class="form-select form-select-lg" required>
-                            <option value="" @if(!old('message_template')) selected @endif disabled>Scegli un template...</option>
+                            <option value="" @if(!old('message_template') && empty($campaignData['message_template'])) selected @endif disabled>Scegli un template...</option>
                             @forelse($templates as $template)
-                                <option value="{{ $template['name'] }}" {{ old('message_template') == $template['name'] ? 'selected' : '' }}>{{ $template['name'] }}</option>
+                                <option value="{{ $template['name'] }}" {{ old('message_template', $campaignData['message_template'] ?? null) == $template['name'] ? 'selected' : '' }}>{{ $template['name'] }}</option>
                             @empty
                                 <option value="" disabled>Nessun template approvato trovato.</option>
                             @endforelse
@@ -125,7 +129,7 @@
                         <label for="attachment_link" class="form-label">Link da allegare (opzionale)</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
-                            <input type="url" id="attachment_link" name="attachment_link" class="form-control form-control-lg" placeholder="https://esempio.com/documento" value="{{ old('attachment_link') }}">
+                            <input type="url" id="attachment_link" name="attachment_link" class="form-control form-control-lg" placeholder="https://esempio.com/documento" value="{{ old('attachment_link', $campaignData['attachment_link'] ?? '') }}">
                         </div>
                         <div class="form-text mt-2">Il link verrà usato se il template lo prevede (es. in un pulsante o come variabile).</div>
                     </div>

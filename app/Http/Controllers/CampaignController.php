@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\SendWhatsAppMessage;
+use App\Models\Campaign;
+use App\Models\CampaignRecipient;
 use Throwable;
 use Illuminate\Http\Request;
-use App\Jobs\SendWhatsAppMessage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 class CampaignController extends Controller
@@ -67,9 +70,14 @@ class CampaignController extends Controller
                 : 'Nessun template approvato trovato. Vengono mostrati template di esempio per continuare.';
         }
 
+        // Recupera i dati della campagna dalla sessione, se presenti, per pre-compilare il form
+        // quando si torna indietro dallo step 2.
+        $campaignData = session()->get('campaign_creation_data');
+
         return view('welcome', [
             'templates' => $templates,
             'templates_error' => $templates_error,
+            'campaignData' => $campaignData,
         ]);
     }
 
@@ -129,7 +137,7 @@ class CampaignController extends Controller
 
         // Salva i dati base della campagna in sessione
         $campaignData = [
-            'name' => $validated['campaign_name'],
+            'campaign_name' => $validated['campaign_name'],
             'recipient_source' => $validated['recipient_source'],
             'message_template' => $validated['message_template'],
             'attachment_link' => $validated['attachment_link'] ?? null,
@@ -144,7 +152,12 @@ class CampaignController extends Controller
         }
 
         if ($validated['recipient_source'] === 'file_upload') {
-            $filePath = $request->file('recipient_file')->store('recipient_files', 'local');
+            $file = $request->file('recipient_file');
+            // Usiamo storeAs per preservare l'estensione originale del file,
+            // che a volte viene interpretata erroneamente come .txt.
+            // Generiamo un nome univoco per evitare sovrascritture.
+            $filename = uniqid('file_', true) . '.' . $file->getClientOriginalExtension();
+            $filePath = $file->storeAs('recipient_files', $filename, 'local');
             $campaignData['recipient_file_path'] = $filePath;
         }
 
@@ -163,11 +176,199 @@ class CampaignController extends Controller
      */
     public function step2(Request $request)
     {
-        // Per ora, passiamo solo i dati dalla sessione alla vista.
-        // La logica di lettura file/db verrà implementata successivamente.
-        return view('step2', [
-            'campaignData' => $request->session()->get('campaign_creation_data')
+        $campaignData = $request->session()->get('campaign_creation_data');
+
+        if (!$campaignData) {
+            return redirect()->route('campaigns.create')->with('error', 'Sessione della campagna scaduta. Per favore, ricomincia.');
+        }
+
+        $viewData = ['campaignData' => $campaignData];
+
+        // Se la fonte è un file, leggiamo le intestazioni per il mapping
+        if ($campaignData['recipient_source'] === 'file_upload' && !empty($campaignData['recipient_file_path'])) {
+            try {
+                $filePath = storage_path('app/' . $campaignData['recipient_file_path']);
+
+                // AGGIUNTA DIAGNOSTICA: Verifichiamo se il file esiste fisicamente prima di leggerlo.
+                if (!file_exists($filePath)) {
+                    Log::error('File non trovato nel percorso di storage: ' . $filePath);
+                    return redirect()->route('campaigns.create')->with('error', 'Errore critico: il file caricato non è stato trovato sul server. Potrebbe essere un problema di permessi sulla cartella `storage/app/recipient_files`.')->withInput($campaignData);
+                }
+
+                $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
+                // NUOVA LOGICA: Usiamo funzioni native per i CSV, come richiesto
+                if ($extension === 'csv') {
+                    $headers = [];
+                    if (($handle = fopen($filePath, "r")) !== FALSE) {
+                        // Leggiamo la prima riga (le intestazioni) usando il punto e virgola come separatore
+                        $headerData = fgetcsv($handle, 0, ";");
+                        fclose($handle);
+
+                        if ($headerData !== false) {
+                            // Tentiamo di correggere la codifica se non è UTF-8
+                            foreach ($headerData as $header) {
+                                if ($header && mb_check_encoding($header, 'UTF-8') === false) {
+                                    // Proviamo a convertire da una codifica comune di Windows
+                                    $convertedHeader = mb_convert_encoding($header, 'UTF-8', 'ISO-8859-1');
+                                    $headers[] = $convertedHeader !== false ? $convertedHeader : $header;
+                                } else {
+                                    $headers[] = $header;
+                                }
+                            }
+                            $viewData['file_headers'] = array_filter($headers);
+                        }
+                    }
+
+                    if (empty($viewData['file_headers'])) {
+                        return redirect()->route('campaigns.create')->with('error', 'Impossibile leggere le intestazioni dal file CSV. Assicurati che il file non sia vuoto, sia codificato correttamente e usi il punto e virgola (;) come separatore.')->withInput($campaignData);
+                    }
+                } elseif (in_array($extension, ['xls', 'xlsx'])) {
+                    // La logica per i file Excel è temporaneamente disabilitata per concentrarsi sui CSV.
+                    // Verrà implementata in un secondo momento.
+                    return redirect()->route('campaigns.create')->with('error', 'La lettura di file Excel (XLS, XLSX) non è ancora implementata. Per favore, usa un file CSV.')->withInput($campaignData);
+                } else {
+                    // Questo caso non dovrebbe verificarsi grazie alla validazione, ma è una sicurezza in più.
+                    return redirect()->route('campaigns.create')->with('error', "Tipo di file non valido ('{$extension}'). Sono ammessi solo file CSV.")->withInput($campaignData);
+                }
+
+            } catch (Throwable $e) {
+                $debugMessage = ' Dettaglio tecnico: ' . $e->getMessage();
+                Log::error('Errore lettura file per mapping: ' . $e->getMessage());
+                return redirect()->route('campaigns.create')->with('error', 'Errore durante la lettura del file. Assicurati che sia in un formato valido (CSV, XLS, XLSX) e non sia corrotto.' . $debugMessage)->withInput($campaignData);
+            }
+        }
+
+        return view('step2', $viewData);
+    }
+
+    /**
+     * Processa il mapping delle colonne e avvia la campagna da file.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function processMapping(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'map_name' => 'required|string',
+            'map_phone' => 'required|string',
         ]);
+
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
+        }
+        $validated = $validator->validated();
+
+        $campaignData = $request->session()->get('campaign_creation_data');
+
+        if (!$campaignData || $campaignData['recipient_source'] !== 'file_upload') {
+            return redirect()->route('campaigns.create')->with('error', 'Sessione della campagna scaduta o non valida.');
+        }
+
+        // 1. Crea la Campagna nel database
+        $campaign = Campaign::create([
+            'name' => $campaignData['campaign_name'],
+            'message_template' => $campaignData['message_template'],
+            'status' => 'pending', // Diventerà 'processing' quando i job iniziano
+        ]);
+
+        // 2. Leggi il file e crea i destinatari
+        $filePath = storage_path('app/' . $campaignData['recipient_file_path']);
+        $mapName = $validated['map_name'];
+        $mapPhone = $validated['map_phone'];
+        $totalRecipients = 0;
+
+        try {
+            $handle = fopen($filePath, "r");
+            $headers = fgetcsv($handle, 0, ";"); // Leggi e ignora le intestazioni
+
+            // Trova gli indici delle colonne
+            $nameIndex = array_search($mapName, $headers);
+            $phoneIndex = array_search($mapPhone, $headers);
+
+            if ($phoneIndex === false) {
+                $campaign->update(['status' => 'failed']);
+                return redirect()->route('campaigns.create')->with('error', 'Errore critico: la colonna del telefono mappata non è stata trovata nel file.');
+            }
+
+            while (($data = fgetcsv($handle, 0, ";")) !== FALSE) {
+                $phoneNumber = $data[$phoneIndex] ?? null;
+                $name = ($nameIndex !== false) ? ($data[$nameIndex] ?? null) : null;
+
+                if ($phoneNumber) {
+                    // Pulisce il numero di telefono (può essere migliorato)
+                    $phoneNumber = preg_replace('/[^0-9+]/', '', $phoneNumber);
+
+                    $recipient = CampaignRecipient::create([
+                        'campaign_id' => $campaign->id,
+                        'phone_number' => $phoneNumber,
+                        'name' => $name,
+                        // Grazie al cast nel modello, possiamo passare direttamente un array. Laravel lo codificherà in JSON.
+                        'params' => ['name' => $name],
+                        'status' => 'queued',
+                    ]);
+
+                    // Accoda il job di invio passando il modello del destinatario
+                    SendWhatsAppMessage::dispatch($recipient);
+                    $totalRecipients++;
+                }
+            }
+            fclose($handle);
+
+            // Aggiorna la campagna con il totale e imposta lo stato a 'processing'
+            $campaign->update([
+                'total_recipients' => $totalRecipients,
+                'status' => 'processing'
+            ]);
+
+            // Pulisci i dati dalla sessione
+            $request->session()->forget('campaign_creation_data');
+
+            // Reindirizza alla pagina di avanzamento
+            return redirect()->route('campaigns.progress', $campaign->id);
+
+        } catch (Throwable $e) {
+            $campaign->update(['status' => 'failed']);
+            Log::error("Errore durante l'elaborazione del file per la campagna {$campaign->id}: " . $e->getMessage());
+            return redirect()->route('campaigns.create')->with('error', 'Si è verificato un errore durante la lettura del file dei destinatari.');
+        }
+    }
+
+    /**
+     * Mostra la pagina di avanzamento di una campagna.
+     */
+    public function showProgress(Campaign $campaign)
+    {
+        return view('campaigns.progress', ['campaign' => $campaign]);
+    }
+
+    /**
+     * Fornisce i dati di stato di una campagna per l'aggiornamento via AJAX.
+     */
+    public function getStatus(Campaign $campaign)
+    {
+        // Se la campagna è in elaborazione e tutti i job sono terminati, la segno come completata.
+        if ($campaign->status === 'processing' && ($campaign->processed_count + $campaign->failed_count) >= $campaign->total_recipients) {
+            $campaign->update(['status' => 'completed']);
+        }
+
+        return response()->json($campaign->only([
+            'id', 'status', 'total_recipients', 'processed_count', 'failed_count'
+        ]));
+    }
+
+    /**
+     * Mostra l'elenco di tutte le campagne.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function index()
+    {
+        // Recupera le campagne paginate, ordinate dalla più recente
+        $campaigns = Campaign::latest()->paginate(15);
+
+        return view('campaigns.index', ['campaigns' => $campaigns]);
     }
 
     /**

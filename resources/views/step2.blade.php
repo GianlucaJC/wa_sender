@@ -45,48 +45,62 @@
                     <div class="mb-5">
                         <h3 class="mb-3">Riepilogo Campagna</h3>
                         <div class="card card-body bg-light">
-                            <p><strong>Nome Campagna:</strong> {{ $campaignData['name'] }}</p>
+                            <p><strong>Nome Campagna:</strong> {{ $campaignData['campaign_name'] }}</p>
                             <p><strong>Template:</strong> <code>{{ $campaignData['message_template'] }}</code></p>
                             <p class="mb-0"><strong>Origine Destinatari:</strong> {{ $campaignData['recipient_source'] }}</p>
                         </div>
                     </div>
 
                     @if($campaignData['recipient_source'] === 'file_upload')
-                        {{-- SEZIONE MAPPING FILE --}}
-                        <div id="file-mapping-section">
-                            <h3>Mappatura Campi da File</h3>
-                            <p>Associa le colonne del tuo file ai campi richiesti per l'invio. Per ora questa è una simulazione, la logica di lettura del file e mappatura verrà implementata.</p>
+                        <form action="{{ route('campaigns.map') }}" method="POST">
+                            @csrf
+                            {{-- SEZIONE MAPPING FILE --}}
+                            <div id="file-mapping-section">
+                                <h3>Mappatura Campi da File</h3>
+                                <p>Associa le colonne del tuo file ai campi richiesti per l'invio.</p>
 
-                            <div class="alert alert-info">
-                                <strong>File caricato:</strong> {{ $campaignData['recipient_file_path'] ?? 'N/D' }}
-                                <br>
-                                In questa sezione verranno mostrate le colonne del file (es. "Nome", "Cognome", "Numero") e potrai associarle ai campi "Nominativo" e "Numero Cellulare".
-                            </div>
-
-                            {{-- Form di mapping (simulato) --}}
-                            <form action="#" method="POST">
-                                @csrf
-                                <div class="row mb-3">
-                                    <div class="col-md-6">
-                                        <label for="map_name" class="form-label">Campo "Nominativo"</label>
-                                        <select id="map_name" name="map_name" class="form-select">
-                                            <option selected>Scegli colonna...</option>
-                                            <option value="col_1">Colonna A (Simulazione)</option>
-                                            <option value="col_2">Colonna B (Simulazione)</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label for="map_phone" class="form-label">Campo "Numero Cellulare"</label>
-                                        <select id="map_phone" name="map_phone" class="form-select">
-                                            <option selected>Scegli colonna...</option>
-                                            <option value="col_1">Colonna A (Simulazione)</option>
-                                            <option value="col_2">Colonna B (Simulazione)</option>
-                                        </select>
-                                    </div>
+                                <div class="alert alert-info">
+                                    <strong>File caricato:</strong> {{ basename($campaignData['recipient_file_path'] ?? 'N/D') }}
                                 </div>
-                                <p class="form-text">Dopo aver mappato i campi, potrai vedere un'anteprima dei dati e confermare l'invio.</p>
-                            </form>
-                        </div>
+
+                                @if(isset($file_headers) && !empty($file_headers))
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="map_name" class="form-label">Campo "Nominativo"</label>
+                                            <select id="map_name" name="map_name" class="form-select" required>
+                                                <option value="" selected disabled>Scegli colonna per il Nominativo...</option>
+                                                @foreach($file_headers as $header)
+                                                    <option value="{{ $header }}">{{ $header }}</option>
+                                                @endforeach
+                                            </select>
+                                            <div class="form-text">Questo campo verrà usato per le variabili come <code>@{{1}}</code> nel messaggio.</div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="map_phone" class="form-label fw-bold">Campo "Numero Cellulare" <span class="text-danger">*</span></label>
+                                            <select id="map_phone" name="map_phone" class="form-select" required>
+                                                <option value="" selected disabled>Scegli colonna per il Cellulare...</option>
+                                                @foreach($file_headers as $header)
+                                                    <option value="{{ $header }}">{{ $header }}</option>
+                                                @endforeach
+                                            </select>
+                                            <div class="form-text">Questo campo è obbligatorio per l'invio.</div>
+                                        </div>
+                                    </div>
+                                @else
+                                    <div class="alert alert-warning">Impossibile leggere le colonne dal file. Assicurati che la prima riga contenga le intestazioni.</div>
+                                @endif
+                            </div>
+                            <hr class="my-5">
+                            {{-- Pulsanti Azione --}}
+                            <div class="d-flex justify-content-between">
+                                <a href="{{ route('campaigns.create') }}" class="btn btn-secondary">
+                                    <i class="bi bi-arrow-left"></i> Modifica Campagna
+                                </a>
+                                <button type="submit" class="btn btn-success btn-lg" @if(!isset($file_headers) || empty($file_headers)) disabled @endif>
+                                    <i class="bi bi-send-check"></i> Prosegui e Avvia Campagna
+                                </button>
+                            </div>
+                        </form>
                     @else
                         {{-- SEZIONE ANTEPRIMA DB --}}
                         <div id="db-preview-section">
@@ -118,20 +132,20 @@
                                 </table>
                             </div>
                             <p class="form-text">Se i dati sono corretti, procedi con l'invio.</p>
+
+                            <hr class="my-5">
+
+                            {{-- Pulsanti Azione --}}
+                            <div class="d-flex justify-content-between">
+                                <a href="{{ route('campaigns.create') }}" class="btn btn-secondary">
+                                    <i class="bi bi-arrow-left"></i> Modifica Campagna
+                                </a>
+                                <button type="submit" class="btn btn-success btn-lg">
+                                    <i class="bi bi-send-check"></i> Avvia Campagna
+                                </button>
+                            </div>
                         </div>
                     @endif
-
-                    <hr class="my-5">
-
-                    {{-- Pulsanti Azione --}}
-                    <div class="d-flex justify-content-between">
-                        <a href="{{ route('campaigns.create') }}" class="btn btn-secondary">
-                            <i class="bi bi-arrow-left"></i> Modifica Campagna
-                        </a>
-                        <button type="submit" class="btn btn-success btn-lg">
-                            <i class="bi bi-send-check"></i> Avvia Campagna
-                        </button>
-                    </div>
                 @endif
             </div>
         </main>

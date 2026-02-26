@@ -18,11 +18,21 @@ use App\Http\Controllers\TemplateController;
 // Rotta per mostrare il form di creazione campagna (associata al metodo create)
 Route::get('/', [CampaignController::class, 'create'])->name('campaigns.create');
 
+// Rotta per visualizzare lo storico delle campagne
+Route::get('/campaigns', [CampaignController::class, 'index'])->name('campaigns.index');
+
 // Rotta per salvare i dati della campagna (associata al metodo store)
 Route::post('/campaigns', [CampaignController::class, 'store'])->name('campaigns.store');
 
 // Rotta per lo step 2 della creazione campagna (anteprima/mapping)
 Route::get('/campaigns/step2', [CampaignController::class, 'step2'])->name('campaigns.step2');
+
+// Rotta per processare il mapping del file e avviare la campagna
+Route::post('/campaigns/map', [CampaignController::class, 'processMapping'])->name('campaigns.map');
+
+// Rotte per il monitoraggio della campagna
+Route::get('/campaigns/{campaign}/progress', [CampaignController::class, 'showProgress'])->name('campaigns.progress');
+Route::get('/campaigns/{campaign}/status', [CampaignController::class, 'getStatus'])->name('campaigns.status');
 
 // Rotta per l'invio del messaggio di test (chiamata via Fetch API)
 Route::post('/campaigns/send-test', [CampaignController::class, 'sendTest'])->name('campaigns.sendTest');
