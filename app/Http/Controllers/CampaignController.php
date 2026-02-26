@@ -280,6 +280,13 @@ class CampaignController extends Controller
         $totalRecipients = 0;
 
         try {
+            // AGGIUNTA DIAGNOSTICA: Verifichiamo che il file esista e sia leggibile prima di procedere.
+            if (!is_readable($filePath)) {
+                Log::error("File non trovato o non leggibile nel percorso di storage durante il processamento: {$filePath}");
+                $campaign->update(['status' => 'failed', 'total_recipients' => 0]);
+                return redirect()->route('campaigns.create')->with('error', 'Errore critico: il file dei destinatari non è stato trovato o non è leggibile. Controllare i permessi della cartella `storage/app/recipient_files`.');
+            }
+
             $handle = fopen($filePath, "r");
             $headers = fgetcsv($handle, 0, ";"); // Leggi e ignora le intestazioni
 
