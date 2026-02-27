@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Campaign;
 use App\Models\CampaignRecipient;
+use App\Models\WhatsappAccount;
 use Throwable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -21,29 +22,37 @@ class CampaignController extends Controller
      */
     public function create()
     {
+        $whatsappAccounts = WhatsappAccount::all();
         $templates = [];
         $templates_error = null;
 
-        $token = config('services.meta_whatsapp.token');
-        $wabaId = config('services.meta_whatsapp.business_account_id');
-        $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+        // Se ci sono account collegati, proviamo a recuperare i template dal primo.
+        // In un'app più complessa, si potrebbe far scegliere l'account all'utente
+        // e poi caricare i template via AJAX.
+        if ($whatsappAccounts->isNotEmpty()) {
+            $account = $whatsappAccounts->first();
+            $token = $account->access_token;
+            $wabaId = $account->waba_id;
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
-        if ($token && $wabaId) {
             try {
                 $url = "https://graph.facebook.com/{$apiVersion}/{$wabaId}/message_templates";
                 // Filtriamo per ottenere solo i template approvati, che sono gli unici utilizzabili
                 $response = Http::withToken($token)->get($url, [
                     'fields' => 'name,status,components', // Chiediamo anche i components per future elaborazioni (variabili)
-                    'status' => 'APPROVED'
+                    'status' => 'APPROVED',
                 ]);
                 $response->throw();
                 $templates = $response->json('data');
             } catch (Throwable $e) {
                 Log::error('Errore nel recuperare i template approvati da Meta: ' . $e->getMessage());
-                $templates_error = 'Impossibile recuperare i template approvati da Meta. Controlla i log.';
+                $templates_error = 'Impossibile recuperare i template approvati da Meta per l\'account "' . $account->name . '". Controlla i log o le credenziali dell\'account.';
             }
+        } else if (config('services.meta_whatsapp.token') && config('services.meta_whatsapp.business_account_id')) {
+            // Fallback: se non ci sono account nel DB ma ci sono le credenziali nel .env (vecchio sistema)
+            $templates_error = 'Nessun account collegato. Per recuperare i template, collega un account WhatsApp o configura le credenziali globali nel file .env.';
         } else {
-            $templates_error = 'Credenziali WhatsApp (WABA ID o Token) non configurate per recuperare i template.';
+            $templates_error = 'Nessun account WhatsApp collegato. Per favore, vai alla sezione "Account WhatsApp" e collega un nuovo account.';
         }
 
         // Se non sono stati trovati template approvati, ne aggiungiamo alcuni di esempio per lo sviluppo
@@ -75,6 +84,7 @@ class CampaignController extends Controller
         $campaignData = session()->get('campaign_creation_data');
 
         return view('welcome', [
+            'whatsappAccounts' => $whatsappAccounts,
             'templates' => $templates,
             'templates_error' => $templates_error,
             'campaignData' => $campaignData,
@@ -432,6 +442,16 @@ class CampaignController extends Controller
     }
 
     /**
+     * Mostra la pagina dell'informativa sulla privacy.
+     *
+     * @return \Illuminate\View\View
+     */
+    public function showPrivacyPolicy()
+    {
+        return view('privacy.index');
+    }
+
+    /**
      * Normalizza e valida un numero di telefono.
      *
      * @param string $number
@@ -480,21 +500,23 @@ class CampaignController extends Controller
     public function sendTest(Request $request)
     {
         $validated = $request->validate([
+            'whatsapp_account_id' => 'required|exists:whatsapp_accounts,id',
             'recipient' => 'required|string|min:10', // Aggiunta una validazione base
             'message_template' => 'required|string',
         ]);
 
         try {
-            $token = config('services.meta_whatsapp.token');
-            $phoneNumberId = config('services.meta_whatsapp.phone_number_id');
+            $account = WhatsappAccount::findOrFail($validated['whatsapp_account_id']);
+            $token = $account->access_token; // L'attributo viene decifrato automaticamente
+            $phoneNumberId = $account->phone_number_id;
             $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
             if (!$token || !$phoneNumberId) {
-                throw new \Exception('Credenziali WhatsApp non configurate.');
+                throw new \Exception('Credenziali non valide per l\'account selezionato.');
             }
 
-            // SIMULAZIONE: Se il token è 'SIMULATE', non inviamo realmente ma diamo esito positivo.
-            if ($token === 'SIMULATE') {
+            // SIMULAZIONE: Se il nome dell'account è 'SIMULATE', non inviamo realmente.
+            if ($account->name === 'SIMULATE') {
                 Log::info('SIMULATED test send to: ' . $validated['recipient']);
                 return response()->json([
                     'message' => 'Messaggio di prova (simulato) inviato con successo.',
@@ -662,6 +684,7 @@ class CampaignController extends Controller
     public function launchUnified(Request $request)
     {
         $validated = $request->validate([
+            'whatsapp_account_id' => 'required|exists:whatsapp_accounts,id',
             'campaign_name' => 'required|string|max:255',
             'message_template' => 'required|string',
             'recipient_source' => 'required|in:fillea_tabulato,assemblea_generale,organismi_dirigenti,file_upload',
@@ -675,6 +698,7 @@ class CampaignController extends Controller
             }
 
             $campaign = Campaign::create([
+                'whatsapp_account_id' => $validated['whatsapp_account_id'],
                 'name' => $validated['campaign_name'],
                 'message_template' => $validated['message_template'],
                 'status' => 'pending',

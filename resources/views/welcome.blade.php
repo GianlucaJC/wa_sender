@@ -54,6 +54,24 @@
 
                     {{-- Session and validation errors will be handled by Swal at the end of the body --}}
 
+                    <!-- Selezione Account WhatsApp -->
+                    <div class="mb-4">
+                        <label for="whatsapp_account_id" class="form-label">Account di Invio</label>
+                        <select id="whatsapp_account_id" name="whatsapp_account_id" class="form-select form-select-lg" required @if($whatsappAccounts->isEmpty()) disabled @endif>
+                            <option value="" selected>Scegli un account WhatsApp...</option>
+                            @forelse($whatsappAccounts as $account)
+                                <option value="{{ $account->id }}" @if(old('whatsapp_account_id', $campaignData['whatsapp_account_id'] ?? null) == $account->id) selected @endif>
+                                    {{ $account->name }} ({{ $account->phone_number_display }})
+                                </option>
+                            @empty
+                                <option value="" disabled>Nessun account collegato. <a href="{{ route('whatsapp-accounts.create') }}">Collegalo ora</a>.</option>
+                            @endforelse
+                        </select>
+                        @if($whatsappAccounts->isEmpty())
+                            <div class="form-text text-danger mt-2">Devi prima collegare un account WhatsApp per poter creare una campagna. <a href="{{ route('whatsapp-accounts.create') }}">Vai alla gestione account</a>.</div>
+                        @endif
+                    </div>
+
                     <!-- Nome Campagna -->
                     <div class="mb-4">
                         <label for="campaign_name" class="form-label">Nome Campagna</label>
@@ -244,7 +262,7 @@
         </div>
 
         <footer class="mt-5 text-center">
-            WA Sender v1.0
+            WA Sender v1.0 | <a href="{{ route('privacy.policy') }}" class="text-white" target="_blank">Informativa Privacy</a>
         </footer>
     </div>
 
@@ -335,6 +353,7 @@
             const sendTestBtn = document.getElementById('send_test_button');
             const testRecipientInput = document.getElementById('test_recipient');
             const testFeedback = document.getElementById('test-send-feedback');
+            const accountSelect = document.getElementById('whatsapp_account_id');
 
             sendTestBtn.addEventListener('click', async () => {
                 const recipient = testRecipientInput.value;
@@ -342,7 +361,7 @@
 
                 // Validazione input
                 if (!recipient || !templateName) {
-                    testFeedback.textContent = 'Per favore, inserisci un numero di telefono e seleziona un template.';
+                    testFeedback.textContent = 'Per favore, seleziona un account, un template e inserisci un numero di telefono.';
                     testFeedback.className = 'form-text mt-2 text-danger';
                     return;
                 }
@@ -385,6 +404,7 @@
                             'Accept': 'application/json',
                         },
                         body: JSON.stringify({
+                            whatsapp_account_id: accountSelect.value,
                             recipient: recipient,
                             message_template: templateName,
                         })

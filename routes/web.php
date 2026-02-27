@@ -47,6 +47,9 @@ Route::get('/campaigns/{campaign}/status', [CampaignController::class, 'getStatu
 // Rotta per la documentazione
 Route::get('/docs', [CampaignController::class, 'showDocs'])->name('docs.index');
 
+// Rotta per l'informativa sulla privacy
+Route::get('/privacy-policy', [CampaignController::class, 'showPrivacyPolicy'])->name('privacy.policy');
+
 // Rotta per l'invio del messaggio di test (chiamata via Fetch API)
 Route::post('/campaigns/send-test', [CampaignController::class, 'sendTest'])->name('campaigns.sendTest');
 
@@ -54,3 +57,8 @@ Route::post('/campaigns/send-test', [CampaignController::class, 'sendTest'])->na
 Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
 Route::get('/templates/create', [TemplateController::class, 'create'])->name('templates.create');
 Route::post('/templates', [TemplateController::class, 'store'])->name('templates.store');
+
+// --- Gestione Account WhatsApp (Multi-cliente) ---
+Route::resource('whatsapp-accounts', \App\Http\Controllers\WhatsappAccountController::class)
+    ->except(['show', 'edit', 'update'])
+    ->names('whatsapp-accounts');

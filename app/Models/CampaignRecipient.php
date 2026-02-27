@@ -10,21 +10,25 @@ class CampaignRecipient extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that aren't mass assignable.
-     * @var array
-     */
-    protected $guarded = [];
-
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array
-     */
-    protected $casts = [
-        'params' => 'array',
+    protected $fillable = [
+        'campaign_id',
+        'phone_number',
+        'name',
+        'params',
+        'status',
+        'processed_at',
+        'error_message',
+        'message_id',
     ];
 
+    protected $casts = [
+        'params' => 'array',
+        'processed_at' => 'datetime',
+    ];
+
+    /**
+     * La campagna a cui questo destinatario appartiene.
+     */
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(Campaign::class);

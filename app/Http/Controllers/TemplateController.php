@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\WhatsappAccount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -22,33 +23,41 @@ class TemplateController extends Controller
             abort(403, 'Azione non autorizzata.');
         }
 
-        $token = config('services.meta_whatsapp.token');
-        $wabaId = config('services.meta_whatsapp.business_account_id');
+        $accounts = WhatsappAccount::all();
         $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+        $allTemplates = [];
+        $error = null;
 
-        if (!$token || !$wabaId) {
-            return view('templates.index', [
-                'is_admin' => $is_admin,
-                'error' => 'Credenziali WhatsApp non configurate correttamente (WABA ID o Token mancanti).',
-                'templates' => []
-            ]);
+        if ($accounts->isEmpty()) {
+            $error = 'Nessun account WhatsApp collegato. Impossibile recuperare i template.';
+        } else {
+            foreach ($accounts as $account) {
+                try {
+                    $url = "https://graph.facebook.com/{$apiVersion}/{$account->waba_id}/message_templates";
+                    $response = Http::withToken($account->access_token)
+                        ->get($url, ['fields' => 'name,status,category,language']);
+
+                    $response->throw();
+
+                    $templatesFromAccount = $response->json('data');
+                    // Aggiungiamo l'informazione sull'account a ogni template per la visualizzazione
+                    foreach ($templatesFromAccount as &$template) {
+                        $template['account_name'] = $account->name;
+                        $template['account_id'] = $account->id;
+                    }
+                    $allTemplates = array_merge($allTemplates, $templatesFromAccount);
+
+                } catch (Throwable $e) {
+                    $errorMessage = "Impossibile recuperare i template per l'account '{$account->name}'.";
+                    Log::error($errorMessage . ' Dettaglio: ' . $e->getMessage());
+                    $error = ($error ? $error . '<br>' : '') . $errorMessage;
+                }
+            }
         }
 
-        $url = "https://graph.facebook.com/{$apiVersion}/{$wabaId}/message_templates";
-
-        try {
-            // Usiamo il parametro 'fields' per richiedere solo i dati che ci servono
-            $response = Http::withToken($token)->get($url, ['fields' => 'name,status,category,language']);
-            $response->throw(); // Lancia un'eccezione se la richiesta fallisce
-
-            $templates = $response->json('data');
-
-            return view('templates.index', ['is_admin' => $is_admin, 'templates' => $templates]);
-
-        } catch (Throwable $e) {
-            Log::error('Errore nel recuperare i template da Meta: ' . $e->getMessage());
-            return view('templates.index', ['is_admin' => $is_admin, 'error' => 'Impossibile recuperare l\'elenco dei template. Controlla i log.', 'templates' => []]);
-        }
+        return view('templates.index', [
+            'is_admin' => $is_admin, 'templates' => $allTemplates, 'error' => $error
+        ]);
     }
 
     /**
@@ -61,8 +70,12 @@ class TemplateController extends Controller
         // Simulazione di un controllo di autorizzazione.
         // In un'applicazione reale, questo verrebbe da un sistema di autenticazione (es. $user->isAdmin()).
         $is_admin = true;
+        $accounts = WhatsappAccount::all();
 
-        return view('templates.create', ['is_admin' => $is_admin]);
+        return view('templates.create', [
+            'is_admin' => $is_admin,
+            'accounts' => $accounts,
+        ]);
     }
 
     /**
@@ -80,18 +93,20 @@ class TemplateController extends Controller
         }
 
         $validated = $request->validate([
+            'whatsapp_account_id' => 'required|exists:whatsapp_accounts,id',
             'name' => 'required|string|max:512|regex:/^[a-z0-9_]+$/',
             'category' => 'required|in:MARKETING,UTILITY,AUTHENTICATION',
             'language_code' => 'required|string|max:15',
             'body_text' => 'required|string',
         ]);
 
-        $token = config('services.meta_whatsapp.token');
-        $wabaId = config('services.meta_whatsapp.business_account_id');
+        $account = WhatsappAccount::findOrFail($validated['whatsapp_account_id']);
+        $token = $account->access_token;
+        $wabaId = $account->waba_id;
         $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
         if (!$token || !$wabaId) {
-            return back()->with('error', 'Credenziali WhatsApp non configurate correttamente (WABA ID o Token mancanti).');
+            return back()->with('error', 'Credenziali non valide per l\'account selezionato.');
         }
 
         $url = "https://graph.facebook.com/{$apiVersion}/{$wabaId}/message_templates";

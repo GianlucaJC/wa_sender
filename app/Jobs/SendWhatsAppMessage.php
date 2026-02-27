@@ -36,19 +36,21 @@ class SendWhatsAppMessage implements ShouldQueue
         // Aggiorna lo stato del destinatario a 'processing'
         $this->recipient->update(['status' => 'processing']);
         $campaign = $this->recipient->campaign;
+        $account = $campaign->whatsappAccount; // Carica l'account associato
 
-        $token = config('services.meta_whatsapp.token');
-        $phoneNumberId = config('services.meta_whatsapp.phone_number_id');
-        $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
-
-        if (!$token || !$phoneNumberId) {
-            Log::critical('WhatsApp credentials not configured. Please check config/services.php and your .env file.');
-            $this->handleFailure('Credenziali WhatsApp non configurate.');
+        // Controlla se la campagna ha un account valido associato
+        if (!$account) {
+            Log::critical("La campagna #{$campaign->id} non ha un account WhatsApp valido associato. Job fallito per il destinatario #{$this->recipient->id}.");
+            $this->handleFailure('Account WhatsApp non trovato per questa campagna.');
             return;
         }
 
-        // SIMULAZIONE: Se il token è 'SIMULATE', non inviamo realmente.
-        if ($token === 'SIMULATE') {
+        $token = $account->access_token; // Decifrato automaticamente da Eloquent
+        $phoneNumberId = $account->phone_number_id;
+        $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+
+        // SIMULAZIONE: Se il nome dell'account è 'SIMULATE', non inviamo realmente.
+        if ($account->name === 'SIMULATE') {
             $this->simulateSend();
             return;
         }
