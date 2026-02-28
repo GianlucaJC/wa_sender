@@ -60,5 +60,5 @@ Route::post('/templates', [TemplateController::class, 'store'])->name('templates
 
 // --- Gestione Account WhatsApp (Multi-cliente) ---
 Route::resource('whatsapp-accounts', \App\Http\Controllers\WhatsappAccountController::class)
-    ->except(['show', 'edit', 'update'])
+    ->except(['show'])
     ->names('whatsapp-accounts');

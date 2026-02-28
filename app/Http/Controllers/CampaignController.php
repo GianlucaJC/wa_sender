@@ -22,15 +22,12 @@ class CampaignController extends Controller
      */
     public function create()
     {
-        $whatsappAccounts = WhatsappAccount::all();
+        $account = WhatsappAccount::first();
         $templates = [];
         $templates_error = null;
 
-        // Se ci sono account collegati, proviamo a recuperare i template dal primo.
-        // In un'app più complessa, si potrebbe far scegliere l'account all'utente
-        // e poi caricare i template via AJAX.
-        if ($whatsappAccounts->isNotEmpty()) {
-            $account = $whatsappAccounts->first();
+        // Se un account è configurato, proviamo a recuperare i suoi template.
+        if ($account) {
             $token = $account->access_token;
             $wabaId = $account->waba_id;
             $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
@@ -46,13 +43,11 @@ class CampaignController extends Controller
                 $templates = $response->json('data');
             } catch (Throwable $e) {
                 Log::error('Errore nel recuperare i template approvati da Meta: ' . $e->getMessage());
-                $templates_error = 'Impossibile recuperare i template approvati da Meta per l\'account "' . $account->name . '". Controlla i log o le credenziali dell\'account.';
+                $templates_error = 'Impossibile recuperare i template approvati da Meta. Controlla i log o le credenziali dell\'account configurato.';
             }
-        } else if (config('services.meta_whatsapp.token') && config('services.meta_whatsapp.business_account_id')) {
-            // Fallback: se non ci sono account nel DB ma ci sono le credenziali nel .env (vecchio sistema)
-            $templates_error = 'Nessun account collegato. Per recuperare i template, collega un account WhatsApp o configura le credenziali globali nel file .env.';
         } else {
-            $templates_error = 'Nessun account WhatsApp collegato. Per favore, vai alla sezione "Account WhatsApp" e collega un nuovo account.';
+            // Non ci sono account configurati nel database.
+            $templates_error = 'Nessun account WhatsApp è stato configurato. Per favore, vai alla sezione "Account WhatsApp" e aggiungi un nuovo account.';
         }
 
         // Se non sono stati trovati template approvati, ne aggiungiamo alcuni di esempio per lo sviluppo
@@ -84,7 +79,7 @@ class CampaignController extends Controller
         $campaignData = session()->get('campaign_creation_data');
 
         return view('welcome', [
-            'whatsappAccounts' => $whatsappAccounts,
+            'account' => $account, // Passiamo il singolo account (o null)
             'templates' => $templates,
             'templates_error' => $templates_error,
             'campaignData' => $campaignData,
@@ -365,8 +360,15 @@ class CampaignController extends Controller
             return redirect()->route('campaigns.create')->with('error', 'Sessione scaduta o nessun destinatario valido trovato. Riprova.');
         }
 
+        $account = WhatsappAccount::first();
+        if (!$account) {
+            // Anche se improbabile arrivare qui senza un account, è una sicurezza in più.
+            return redirect()->route('campaigns.create')->with('error', 'Nessun account WhatsApp configurato. Impossibile avviare la campagna.');
+        }
+
         // 1. Crea la Campagna nel database
         $campaign = Campaign::create([
+            'whatsapp_account_id' => $account->id,
             'name' => $campaignData['campaign_name'],
             'message_template' => $campaignData['message_template'],
             'status' => 'pending',
@@ -500,13 +502,17 @@ class CampaignController extends Controller
     public function sendTest(Request $request)
     {
         $validated = $request->validate([
-            'whatsapp_account_id' => 'required|exists:whatsapp_accounts,id',
+            // 'whatsapp_account_id' => 'required|exists:whatsapp_accounts,id', // Rimosso, si usa l'account di default
             'recipient' => 'required|string|min:10', // Aggiunta una validazione base
             'message_template' => 'required|string',
         ]);
 
         try {
-            $account = WhatsappAccount::findOrFail($validated['whatsapp_account_id']);
+            $account = WhatsappAccount::first();
+            if (!$account) {
+                throw new \Exception('Nessun account WhatsApp è configurato nel sistema.');
+            }
+
             $token = $account->access_token; // L'attributo viene decifrato automaticamente
             $phoneNumberId = $account->phone_number_id;
             $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
@@ -683,8 +689,13 @@ class CampaignController extends Controller
      */
     public function launchUnified(Request $request)
     {
+        $account = WhatsappAccount::first();
+        if (!$account) {
+            return back()->with('error', 'Nessun account WhatsApp configurato. Impossibile avviare la campagna.')->withInput();
+        }
+
         $validated = $request->validate([
-            'whatsapp_account_id' => 'required|exists:whatsapp_accounts,id',
+            // 'whatsapp_account_id' => 'required|exists:whatsapp_accounts,id', // Rimosso
             'campaign_name' => 'required|string|max:255',
             'message_template' => 'required|string',
             'recipient_source' => 'required|in:fillea_tabulato,assemblea_generale,organismi_dirigenti,file_upload',
@@ -698,7 +709,7 @@ class CampaignController extends Controller
             }
 
             $campaign = Campaign::create([
-                'whatsapp_account_id' => $validated['whatsapp_account_id'],
+                'whatsapp_account_id' => $account->id,
                 'name' => $validated['campaign_name'],
                 'message_template' => $validated['message_template'],
                 'status' => 'pending',

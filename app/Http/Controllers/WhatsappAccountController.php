@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\WhatsappAccount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class WhatsappAccountController extends Controller
@@ -19,68 +20,85 @@ class WhatsappAccountController extends Controller
     }
 
     /**
-     * Mostra la pagina per collegare un nuovo account.
+     * Mostra la pagina per creare un nuovo account (per admin).
      */
     public function create()
     {
-        $facebook_client_id = config('services.meta_whatsapp.client_id');
-        if (!$facebook_client_id) {
-            // Per semplicità, non ho modificato il file config/services.php, ma dovresti aggiungere
-            // 'client_id' => env('META_WHATSAPP_CLIENT_ID') all'array 'meta_whatsapp'.
-            // Ho simulato la sua presenza qui per la vista.
-            return view('whatsapp_accounts.create')->with('error', 'L\'ID Cliente di Facebook non è configurato. Imposta `META_WHATSAPP_CLIENT_ID` nel tuo file .env e aggiungilo a `config/services.php`.');
-        }
-        return view('whatsapp_accounts.create', ['facebook_client_id' => $facebook_client_id]);
+        // La logica per l'Embedded Signup è stata rimossa.
+        // Ora questo metodo mostra un semplice form per l'inserimento manuale dei dati.
+        return view('whatsapp_accounts.create');
     }
 
     /**
-     * Salva un nuovo account WhatsApp collegato tramite Embedded Signup.
+     * Salva un nuovo account WhatsApp inserito dall'admin.
      */
     public function store(Request $request)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'accessToken' => 'required|string',
-            'wabaId' => 'required|string',
-            'phoneNumberId' => 'required|string',
-            'businessName' => 'required|string',
-            'phoneNumber' => 'required|string',
+            'access_token' => 'required|string',
+            'waba_id' => 'required|string|unique:whatsapp_accounts,waba_id',
+            'phone_number_id' => 'required|string|unique:whatsapp_accounts,phone_number_id',
+            'business_name' => 'required|string|max:255',
+            'phone_number_display' => 'required|string|max:255',
         ]);
 
         try {
-            // Controlla se un account con lo stesso WABA ID o Phone Number ID esiste già
-            $existing = WhatsappAccount::where('waba_id', $validated['wabaId'])
-                ->orWhere('phone_number_id', $validated['phoneNumberId'])
-                ->first();
+            WhatsappAccount::create($validated);
 
-            if ($existing) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Questo account WhatsApp o numero di telefono è già stato collegato.'
-                ], 409); // 409 Conflict
-            }
-
-            WhatsappAccount::create([
-                'name' => $validated['name'],
-                'access_token' => $validated['accessToken'],
-                'waba_id' => $validated['wabaId'],
-                'phone_number_id' => $validated['phoneNumberId'],
-                'business_name' => $validated['businessName'],
-                'phone_number_display' => $validated['phoneNumber'],
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Account collegato con successo!',
-                'redirect_url' => route('whatsapp-accounts.index')
-            ]);
+            return redirect()->route('whatsapp-accounts.index')
+                ->with('success', 'Account WhatsApp creato con successo!');
 
         } catch (Throwable $e) {
             Log::error('Errore durante il salvataggio dell\'account WhatsApp: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Si è verificato un errore interno durante il salvataggio dell\'account. Controlla i log.'
-            ], 500);
+            return back()->with('error', 'Si è verificato un errore interno durante il salvataggio dell\'account. Controlla i log.')->withInput();
+        }
+    }
+
+    /**
+     * Mostra il form per modificare un account esistente.
+     *
+     * @param  \App\Models\WhatsappAccount  $whatsappAccount
+     * @return \Illuminate\View\View
+     */
+    public function edit(WhatsappAccount $whatsappAccount)
+    {
+        return view('whatsapp_accounts.edit', ['account' => $whatsappAccount]);
+    }
+
+    /**
+     * Aggiorna un account WhatsApp esistente.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Models\WhatsappAccount  $whatsappAccount
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function update(Request $request, WhatsappAccount $whatsappAccount)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'access_token' => 'nullable|string', // L'admin può lasciarlo vuoto per non aggiornarlo
+            'waba_id' => ['required', 'string', Rule::unique('whatsapp_accounts')->ignore($whatsappAccount->id)],
+            'phone_number_id' => ['required', 'string', Rule::unique('whatsapp_accounts')->ignore($whatsappAccount->id)],
+            'business_name' => 'required|string|max:255',
+            'phone_number_display' => 'required|string|max:255',
+        ]);
+
+        try {
+            $updateData = $validated;
+            // Non aggiornare il token se il campo è stato lasciato vuoto
+            if (empty($validated['access_token'])) {
+                unset($updateData['access_token']);
+            }
+
+            $whatsappAccount->update($updateData);
+
+            return redirect()->route('whatsapp-accounts.index')
+                ->with('success', 'Account WhatsApp aggiornato con successo!');
+
+        } catch (Throwable $e) {
+            Log::error("Errore durante l'aggiornamento dell'account WhatsApp #{$whatsappAccount->id}: " . $e->getMessage());
+            return back()->with('error', 'Si è verificato un errore interno durante l\'aggiornamento dell\'account.')->withInput();
         }
     }
 

@@ -41,9 +41,9 @@
 
         <div class="text-center mb-4">
             <a href="{{ route('docs.index') }}" class="btn btn-outline-white"><i class="bi bi-question-circle"></i> Guida Utente</a>
-            <a href="{{ route('campaigns.index') }}" class="btn btn-outline-white"><i class="bi bi-archive"></i> Storico Campagne</a>
+            <a href="{{ route('campaigns.index') }}" class="btn btn-outline-white @if(!$account) disabled @endif" @if(!$account) aria-disabled="true" @endif><i class="bi bi-archive"></i> Storico Campagne</a>
             @if($is_admin)
-            <a href="{{ route('templates.index') }}" class="btn btn-outline-white"><i class="bi bi-card-list"></i> Gestisci Template</a>
+            <a href="{{ route('templates.index') }}" class="btn btn-outline-white @if(!$account) disabled @endif" @if(!$account) aria-disabled="true" @endif><i class="bi bi-card-list"></i> Gestisci Template</a>
             @endif
         </div>
 
@@ -54,28 +54,27 @@
 
                     {{-- Session and validation errors will be handled by Swal at the end of the body --}}
 
-                    <!-- Selezione Account WhatsApp -->
+                    <!-- Account di Invio (sola lettura) -->
                     <div class="mb-4">
-                        <label for="whatsapp_account_id" class="form-label">Account di Invio</label>
-                        <select id="whatsapp_account_id" name="whatsapp_account_id" class="form-select form-select-lg" required @if($whatsappAccounts->isEmpty()) disabled @endif>
-                            <option value="" selected>Scegli un account WhatsApp...</option>
-                            @forelse($whatsappAccounts as $account)
-                                <option value="{{ $account->id }}" @if(old('whatsapp_account_id', $campaignData['whatsapp_account_id'] ?? null) == $account->id) selected @endif>
-                                    {{ $account->name }} ({{ $account->phone_number_display }})
-                                </option>
-                            @empty
-                                <option value="" disabled>Nessun account collegato. <a href="{{ route('whatsapp-accounts.create') }}">Collegalo ora</a>.</option>
-                            @endforelse
-                        </select>
-                        @if($whatsappAccounts->isEmpty())
-                            <div class="form-text text-danger mt-2">Devi prima collegare un account WhatsApp per poter creare una campagna. <a href="{{ route('whatsapp-accounts.create') }}">Vai alla gestione account</a>.</div>
+                        <label class="form-label">Account di Invio</label>
+                        @if($account)
+                            <div class="card card-body bg-light">
+                                <p class="mb-0 fs-5">
+                                    <strong>{{ $account->name }}</strong> ({{ $account->phone_number_display }})
+                                </p>
+                            </div>
+                        @else
+                            <div class="alert alert-danger">
+                                <strong>Nessun account WhatsApp configurato.</strong>
+                                <p class="mb-0">Per poter creare una campagna, un amministratore deve prima configurare un account di invio.</p>
+                            </div>
                         @endif
                     </div>
 
                     <!-- Nome Campagna -->
                     <div class="mb-4">
                         <label for="campaign_name" class="form-label">Nome Campagna</label>
-                        <input type="text" id="campaign_name" name="campaign_name" class="form-control form-control-lg" placeholder="Es: Promozione Estiva" value="{{ old('campaign_name', $campaignData['campaign_name'] ?? '') }}" required>
+                        <input type="text" id="campaign_name" name="campaign_name" class="form-control form-control-lg" placeholder="Es: Promozione Estiva" value="{{ old('campaign_name', $campaignData['campaign_name'] ?? '') }}" @if(!$account) disabled @endif required>
                     </div>
 
                     <!-- Tipologia di Invio -->
@@ -83,25 +82,25 @@
                         <label class="form-label fw-semibold">Modalità di Invio Destinatari</label>
                         <div class="card card-body bg-body">
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="recipient_source" id="source_fillea" value="fillea_tabulato" {{ old('recipient_source', $campaignData['recipient_source'] ?? 'fillea_tabulato') == 'fillea_tabulato' ? 'checked' : '' }}>
+                                <input class="form-check-input" type="radio" name="recipient_source" id="source_fillea" value="fillea_tabulato" {{ old('recipient_source', $campaignData['recipient_source'] ?? 'fillea_tabulato') == 'fillea_tabulato' ? 'checked' : '' }} @if(!$account) disabled @endif>
                                 <label class="form-check-label" for="source_fillea">
                                     Attivi iscritti FILLEA da tabulato
                                 </label>
                             </div>
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="recipient_source" id="source_assemblea" value="assemblea_generale" {{ old('recipient_source', $campaignData['recipient_source'] ?? null) == 'assemblea_generale' ? 'checked' : '' }}>
+                                <input class="form-check-input" type="radio" name="recipient_source" id="source_assemblea" value="assemblea_generale" {{ old('recipient_source', $campaignData['recipient_source'] ?? null) == 'assemblea_generale' ? 'checked' : '' }} @if(!$account) disabled @endif>
                                 <label class="form-check-label" for="source_assemblea">
                                     Assemblea generale / Comitato direttivo
                                 </label>
                             </div>
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="recipient_source" id="source_organismi" value="organismi_dirigenti" {{ old('recipient_source', $campaignData['recipient_source'] ?? null) == 'organismi_dirigenti' ? 'checked' : '' }}>
+                                <input class="form-check-input" type="radio" name="recipient_source" id="source_organismi" value="organismi_dirigenti" {{ old('recipient_source', $campaignData['recipient_source'] ?? null) == 'organismi_dirigenti' ? 'checked' : '' }} @if(!$account) disabled @endif>
                                 <label class="form-check-label" for="source_organismi">
                                     Organismi dirigenti della tua struttura
                                 </label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="recipient_source" id="source_file" value="file_upload" {{ old('recipient_source', $campaignData['recipient_source'] ?? null) == 'file_upload' ? 'checked' : '' }}>
+                                <input class="form-check-input" type="radio" name="recipient_source" id="source_file" value="file_upload" {{ old('recipient_source', $campaignData['recipient_source'] ?? null) == 'file_upload' ? 'checked' : '' }} @if(!$account) disabled @endif>
                                 <label class="form-check-label" for="source_file">
                                     Da file Excel/CSV
                                 </label>
@@ -112,7 +111,7 @@
                     <!-- Sezione Upload File (visibile solo se si sceglie l'opzione file) -->
                     <div id="file_upload_section" class="mb-4" style="display: none;">
                         <label for="recipient_file" class="form-label">Carica File Destinatari</label>
-                        <input class="form-control form-control-lg" type="file" id="recipient_file" name="recipient_file" accept=".csv">
+                        <input class="form-control form-control-lg" type="file" id="recipient_file" name="recipient_file" accept=".csv" @if(!$account) disabled @endif>
                         <div class="form-text mt-2">
                             Il file verrà caricato automaticamente. Sono ammessi solo file CSV con separatore punto e virgola (;).
                         </div>
@@ -129,7 +128,7 @@
                     <!-- Selezione Template -->
                     <div class="mb-4">
                         <label for="message_template_name" class="form-label">Template Messaggio Approvato</label>
-                        <select id="message_template_name" name="message_template" class="form-select form-select-lg" required>
+                        <select id="message_template_name" name="message_template" class="form-select form-select-lg" required @if(!$account) disabled @endif>
                             <option value="" selected>Scegli un template...</option>
                             @forelse($templates as $template)
                                 <option value="{{ $template['name'] }}" @if(old('message_template', $campaignData['message_template'] ?? null) == $template['name']) selected @endif>{{ $template['name'] }}</option>
@@ -147,14 +146,14 @@
                         <label for="attachment_link" class="form-label">Link da allegare (opzionale)</label>
                         <div class="input-group">
                             <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
-                            <input type="url" id="attachment_link" name="attachment_link" class="form-control form-control-lg" placeholder="https://esempio.com/documento" value="{{ old('attachment_link', $campaignData['attachment_link'] ?? '') }}">
+                            <input type="url" id="attachment_link" name="attachment_link" class="form-control form-control-lg" placeholder="https://esempio.com/documento" value="{{ old('attachment_link', $campaignData['attachment_link'] ?? '') }}" @if(!$account) disabled @endif>
                         </div>
                         <div class="form-text mt-2">Il link verrà usato se il template lo prevede (es. in un pulsante o come variabile).</div>
                     </div>
 
                     <div class="mb-4" style='display:none'>
                         <label for="attachment_pdf" class="form-label">PDF da allegare (opzionale)</label>
-                        <input class="form-control form-control-lg" type="file" id="attachment_pdf" name="attachment_pdf" accept="application/pdf">
+                        <input class="form-control form-control-lg" type="file" id="attachment_pdf" name="attachment_pdf" accept="application/pdf" @if(!$account) disabled @endif>
                         <div class="form-text mt-2">Il PDF verrà inviato come documento se il template selezionato ha un header di tipo "Documento".</div>
                     </div>
 
@@ -189,10 +188,10 @@
                         <div class="row g-2 align-items-center">
                             <div class="col-sm">
                                 <label for="test_recipient" class="visually-hidden">Numero di telefono</label>
-                                <input type="tel" class="form-control" id="test_recipient" placeholder="Numero di telefono per il test (es. 393331234567)">
+                                <input type="tel" class="form-control" id="test_recipient" placeholder="Numero di telefono per il test (es. 393331234567)" @if(!$account) disabled @endif>
                             </div>
                             <div class="col-sm-auto">
-                                <button type="button" id="send_test_button" class="btn btn-outline-secondary w-100">
+                                <button type="button" id="send_test_button" class="btn btn-outline-secondary w-100" @if(!$account) disabled @endif>
                                     <i class="bi bi-whatsapp"></i> Invia Messaggio di Prova
                                 </button>
                             </div>
@@ -202,7 +201,7 @@
 
                     <!-- Pulsante di avvio -->
                     <div class="d-flex justify-content-end mt-5">
-                        <button type="submit" id="main-launch-button" class="btn btn-primary btn-lg">
+                        <button type="submit" id="main-launch-button" class="btn btn-primary btn-lg" @if(!$account) disabled @endif>
                             <i class="bi bi-send-check"></i> Avvia Campagna
                         </button>
                     </div>
@@ -279,6 +278,7 @@
             const defaultPreviewText = previewBox.textContent;
             const templatesData = @json($templates);
             const csrfToken = document.querySelector('input[name="_token"]').value;
+            const hasAccount = {{ $account ? 'true' : 'false' }};
 
             // AJAX Flow elements
             const fileInput = document.getElementById('recipient_file');
@@ -311,7 +311,7 @@
                     mainLaunchButton.innerHTML = '<i class="bi bi-shield-check"></i> Prima Valida il File';
                 } else {
                     fileUploadSection.style.display = 'none';
-                    mainLaunchButton.disabled = false;
+                    mainLaunchButton.disabled = !hasAccount;
                     mainLaunchButton.innerHTML = '<i class="bi bi-send-check"></i> Avvia Campagna';
                 }
             };
@@ -353,15 +353,14 @@
             const sendTestBtn = document.getElementById('send_test_button');
             const testRecipientInput = document.getElementById('test_recipient');
             const testFeedback = document.getElementById('test-send-feedback');
-            const accountSelect = document.getElementById('whatsapp_account_id');
 
             sendTestBtn.addEventListener('click', async () => {
                 const recipient = testRecipientInput.value;
                 const templateName = templateSelect.value;
 
                 // Validazione input
-                if (!recipient || !templateName) {
-                    testFeedback.textContent = 'Per favore, seleziona un account, un template e inserisci un numero di telefono.';
+                if (!recipient || !templateName ) {
+                    testFeedback.textContent = 'Per favore, seleziona un template e inserisci un numero di telefono.';
                     testFeedback.className = 'form-text mt-2 text-danger';
                     return;
                 }
@@ -404,7 +403,6 @@
                             'Accept': 'application/json',
                         },
                         body: JSON.stringify({
-                            whatsapp_account_id: accountSelect.value,
                             recipient: recipient,
                             message_template: templateName,
                         })
@@ -553,7 +551,7 @@
                     </ul>
                     ${invalidTable}`;
                 
-                mainLaunchButton.disabled = report.valid_count === 0;
+                mainLaunchButton.disabled = report.valid_count === 0 || !hasAccount;
                 mainLaunchButton.innerHTML = `<i class="bi bi-send-check"></i> Avvia Campagna per ${report.valid_count} Contatti`;
             }
 
