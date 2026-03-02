@@ -23,40 +23,35 @@ class TemplateController extends Controller
             abort(403, 'Azione non autorizzata.');
         }
 
-        $accounts = WhatsappAccount::all();
+        // Recupera l'account dell'utente corrente
+        $wa_id = session('wa_id');
+        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+
         $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
-        $allTemplates = [];
+        $templates = [];
         $error = null;
 
-        if ($accounts->isEmpty()) {
+        if (!$account) {
             $error = 'Nessun account WhatsApp collegato. Impossibile recuperare i template.';
         } else {
-            foreach ($accounts as $account) {
-                try {
-                    $url = "https://graph.facebook.com/{$apiVersion}/{$account->waba_id}/message_templates";
-                    $response = Http::withToken($account->access_token)
-                        ->get($url, ['fields' => 'name,status,category,language']);
+            try {
+                $url = "https://graph.facebook.com/{$apiVersion}/{$account->waba_id}/message_templates";
+                $response = Http::withToken($account->access_token)
+                    ->get($url, ['fields' => 'name,status,category,language']);
 
-                    $response->throw();
+                $response->throw();
 
-                    $templatesFromAccount = $response->json('data');
-                    // Aggiungiamo l'informazione sull'account a ogni template per la visualizzazione
-                    foreach ($templatesFromAccount as &$template) {
-                        $template['account_name'] = $account->name;
-                        $template['account_id'] = $account->id;
-                    }
-                    $allTemplates = array_merge($allTemplates, $templatesFromAccount);
-
-                } catch (Throwable $e) {
-                    $errorMessage = "Impossibile recuperare i template per l'account '{$account->name}'.";
-                    Log::error($errorMessage . ' Dettaglio: ' . $e->getMessage());
-                    $error = ($error ? $error . '<br>' : '') . $errorMessage;
-                }
+                $templates = $response->json('data');
+                
+            } catch (Throwable $e) {
+                $errorMessage = "Impossibile recuperare i template per l'account '{$account->name}'.";
+                Log::error($errorMessage . ' Dettaglio: ' . $e->getMessage());
+                $error = $errorMessage;
             }
         }
 
         return view('templates.index', [
-            'is_admin' => $is_admin, 'templates' => $allTemplates, 'error' => $error
+            'is_admin' => $is_admin, 'templates' => $templates, 'error' => $error
         ]);
     }
 

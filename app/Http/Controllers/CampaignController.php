@@ -22,7 +22,14 @@ class CampaignController extends Controller
      */
     public function create()
     {
-        $account = WhatsappAccount::first();
+
+    //TEST!!!!
+session(['wa_id' => 1]); 
+
+        // Recupera l'ID dell'account dalla sessione. Se non c'è, usa l'account di simulazione come fallback.
+        $wa_id = session('wa_id');
+        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+
         $templates = [];
         $templates_error = null;
 
@@ -427,8 +434,13 @@ class CampaignController extends Controller
      */
     public function index()
     {
-        // Recupera le campagne paginate, ordinate dalla più recente
-        $campaigns = Campaign::latest()->paginate(15);
+        // Recupera l'account dell'utente corrente
+        $wa_id = session('wa_id');
+        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+
+        // Mostra solo le campagne associate all'account dell'utente.
+        // Se non c'è un account, la collezione sarà vuota.
+        $campaigns = Campaign::where('whatsapp_account_id', $account?->id)->latest()->paginate(15);
 
         return view('campaigns.index', ['campaigns' => $campaigns]);
     }
@@ -508,7 +520,10 @@ class CampaignController extends Controller
         ]);
 
         try {
-            $account = WhatsappAccount::first();
+            // Recupera l'ID dell'account dalla sessione. Se non c'è, usa l'account di simulazione come fallback.
+            $wa_id = session('wa_id');
+            $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+
             if (!$account) {
                 throw new \Exception('Nessun account WhatsApp è configurato nel sistema.');
             }
@@ -523,6 +538,7 @@ class CampaignController extends Controller
 
             // SIMULAZIONE: Se il nome dell'account è 'SIMULATE', non inviamo realmente.
             if ($account->name === 'SIMULATE') {
+                //sleep(rand(1, 2)); // Simula un ritardo di rete per un feedback più realistico.
                 Log::info('SIMULATED test send to: ' . $validated['recipient']);
                 return response()->json([
                     'message' => 'Messaggio di prova (simulato) inviato con successo.',
@@ -689,7 +705,10 @@ class CampaignController extends Controller
      */
     public function launchUnified(Request $request)
     {
-        $account = WhatsappAccount::first();
+        // Recupera l'ID dell'account dalla sessione. Se non c'è, usa l'account di simulazione come fallback.
+        $wa_id = session('wa_id');
+        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+
         if (!$account) {
             return back()->with('error', 'Nessun account WhatsApp configurato. Impossibile avviare la campagna.')->withInput();
         }
@@ -735,5 +754,31 @@ class CampaignController extends Controller
             // Logica per le altre fonti di destinatari (da implementare)
             return back()->with('error', 'La modalità di invio selezionata non è ancora stata implementata.')->withInput();
         }
+    }
+
+    /**
+     * Interrompe una campagna in corso.
+     *
+     * @param Campaign $campaign
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function stop(Campaign $campaign)
+    {
+        // Recupera l'account dell'utente corrente per l'autorizzazione
+        $wa_id = session('wa_id');
+        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+
+        // Verifica che l'utente sia autorizzato a modificare questa campagna
+        if (!$account || $campaign->whatsapp_account_id !== $account->id) {
+            return back()->with('error', 'Non sei autorizzato a fermare questa campagna.');
+        }
+
+        // Si può interrompere solo una campagna in 'processing'
+        if ($campaign->status === 'processing') {
+            $campaign->update(['status' => 'cancelled']);
+            return back()->with('success', 'La campagna è stata impostata per l\'interruzione. I messaggi non ancora elaborati verranno annullati.');
+        }
+
+        return back()->with('info', 'Questa campagna non è in esecuzione o è già stata completata/cancellata.');
     }
 }

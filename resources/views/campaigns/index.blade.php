@@ -34,11 +34,13 @@
                         </thead>
                         <tbody>
                             @forelse($campaigns as $campaign)
+                            
                                 @php
                                     $status_info = match($campaign->status) {
                                         'completed' => ['class' => 'bg-success', 'label' => 'Completata'],
                                         'processing' => ['class' => 'bg-info text-dark', 'label' => 'In corso'],
                                         'pending' => ['class' => 'bg-secondary', 'label' => 'In attesa'],
+                                        'cancelled' => ['class' => 'bg-warning text-dark', 'label' => 'Annullata'],
                                         'failed' => ['class' => 'bg-danger', 'label' => 'Fallita'],
                                         default => ['class' => 'bg-light text-dark', 'label' => ucfirst($campaign->status)],
                                     };
@@ -52,9 +54,13 @@
                                     </td>
                                     <td>{{ $campaign->created_at->format('d/m/Y H:i') }}</td>
                                     <td class="text-end">
-                                        <a href="{{ route('campaigns.progress', $campaign) }}" class="btn btn-sm btn-outline-primary" title="Visualizza dettagli">
-                                            <i class="bi bi-eye"></i> Dettagli
-                                        </a>
+                                        <a href="{{ route('campaigns.progress', $campaign) }}" class="btn btn-sm btn-info">Dettagli</a>
+                                        @if($campaign->status === 'processing')
+                                            <form action="{{ route('campaigns.stop', $campaign) }}" method="POST" class="d-inline-block" onsubmit="return confirm('Sei sicuro di voler interrompere questa campagna?');">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-danger">Interrompi</button>
+                                            </form>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty

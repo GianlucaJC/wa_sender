@@ -58,6 +58,9 @@ Route::get('/templates', [TemplateController::class, 'index'])->name('templates.
 Route::get('/templates/create', [TemplateController::class, 'create'])->name('templates.create');
 Route::post('/templates', [TemplateController::class, 'store'])->name('templates.store');
 
+Route::post('/campaigns/{campaign}/stop', [App\Http\Controllers\CampaignController::class, 'stop'])->name('campaigns.stop');
+
+
 // --- Gestione Account WhatsApp (Multi-cliente) ---
 Route::resource('whatsapp-accounts', \App\Http\Controllers\WhatsappAccountController::class)
     ->except(['show'])

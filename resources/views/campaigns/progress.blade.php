@@ -19,10 +19,24 @@
         </header>
 
         <main class="card shadow-sm" id="progress-panel" data-campaign-id="{{ $campaign->id }}">
+
+
+
             <div class="card-header fs-5">
                 Riepilogo Campagna: <strong>{{ $campaign->name }}</strong>
             </div>
+          
             <div class="card-body p-4">
+            @if ($campaign->status === 'processing')
+                <div class="my-4">
+                    <form action="{{ route('campaigns.stop', $campaign) }}" method="POST" onsubmit="return confirm('Sei sicuro di voler interrompere questa campagna? I messaggi non ancora inviati verranno annullati.');">
+                        @csrf
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-stop-circle"></i> Interrompi Campagna
+                        </button>
+                    </form>
+                </div>
+            @endif              
                 <div class="row">
                     <div class="col-md-4 mb-3">
                         <div class="d-flex align-items-center">
@@ -102,10 +116,11 @@
                 pending: '<span class="badge bg-secondary status-badge">In Attesa</span>',
                 processing: '<span class="badge bg-info text-dark status-badge">In Elaborazione...</span>',
                 completed: '<span class="badge bg-success status-badge">Completata</span>',
+                cancelled: '<span class="badge bg-warning text-dark status-badge">Annullata</span>',
                 failed: '<span class="badge bg-danger status-badge">Fallita</span>',
             };
 
-            let intervalId;
+            let intervalId = null;
 
             async function fetchStatus() {
                 try {
@@ -124,7 +139,9 @@
                     sentBar.style.width = total > 0 ? `${(sent / total) * 100}%` : '0%';
                     failedBar.style.width = total > 0 ? `${(failed / total) * 100}%` : '0%';
 
-                    if (data.status === 'completed' || data.status === 'failed') clearInterval(intervalId);
+                    if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
+                        if (intervalId) clearInterval(intervalId);
+                    }
                 } catch (error) {
                     statusEl.innerHTML = '<span class="badge bg-danger status-badge">Errore</span>';
                     clearInterval(intervalId);

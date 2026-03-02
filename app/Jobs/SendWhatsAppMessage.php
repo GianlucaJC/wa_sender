@@ -33,12 +33,25 @@ class SendWhatsAppMessage implements ShouldQueue
      */
     public function handle(): void
     {
+        // Ricarichiamo il modello con le sue relazioni per avere lo stato più aggiornato,
+        // specialmente per processi di lunga durata, per intercettare comandi come 'stop'.
+        $this->recipient->load('campaign.whatsappAccount');
+        $campaign = $this->recipient->campaign;
+        $account = $campaign->whatsappAccount;
+
+        // Se la campagna è stata annullata, interrompiamo l'esecuzione.
+        if ($campaign->status === 'cancelled') {
+            $this->recipient->update(['status' => 'cancelled', 'processed_at' => now()]);
+            // Incrementiamo il contatore dei falliti per far avanzare la barra di progresso
+            // e permettere alla campagna di raggiungere il 100% di elaborazione.
+            $campaign->increment('failed_count');
+            // Non falliamo il job, lo terminiamo "con successo" in modo che venga rimosso dalla coda.
+            return;
+        }
+
         // Aggiorna lo stato del destinatario a 'processing'
         $this->recipient->update(['status' => 'processing']);
-        $campaign = $this->recipient->campaign;
-        $account = $campaign->whatsappAccount; // Carica l'account associato
 
-        // Controlla se la campagna ha un account valido associato
         if (!$account) {
             Log::critical("La campagna #{$campaign->id} non ha un account WhatsApp valido associato. Job fallito per il destinatario #{$this->recipient->id}.");
             $this->handleFailure('Account WhatsApp non trovato per questa campagna.');
