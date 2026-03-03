@@ -61,6 +61,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Management System Home URL
+    |--------------------------------------------------------------------------
+    |
+    | This URL is used to redirect users back to the main management system
+    | in case of authentication errors (e.g., expired token).
+    |
+    */
+    'management_home_url' => env('MANAGEMENT_HOME_URL', '#'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |
@@ -168,6 +179,7 @@ return [
         // App\Providers\BroadcastServiceProvider::class,
         App\Providers\EventServiceProvider::class,
         App\Providers\RouteServiceProvider::class,
+        App\Providers\ViewServiceProvider::class,
     ])->toArray(),
 
     /*

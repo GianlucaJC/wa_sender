@@ -1,11 +1,15 @@
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-@php($is_admin = true) {{-- SIMULAZIONE ADMIN --}}
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <title>FilleaOFFICE WhatsApp - Nuova Campagna</title>
+
+    <!-- Token di autenticazione JWT per le chiamate API -->
+    <meta name="jwt-token" content="{{ $token }}">
+    <!-- Token CSRF per la protezione contro Cross-Site Request Forgery -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
@@ -40,16 +44,14 @@
         </header>
 
         <div class="text-center mb-4">
-            <a href="{{ route('docs.index') }}" class="btn btn-outline-white"><i class="bi bi-question-circle"></i> Guida Utente</a>
-            <a href="{{ route('campaigns.index') }}" class="btn btn-outline-white @if(!$account) disabled @endif" @if(!$account) aria-disabled="true" @endif><i class="bi bi-archive"></i> Storico Campagne</a>
-            @if($is_admin)
-            <a href="{{ route('templates.index') }}" class="btn btn-outline-white @if(!$account) disabled @endif" @if(!$account) aria-disabled="true" @endif><i class="bi bi-card-list"></i> Gestisci Template</a>
-            @endif
+            <a href="{{ route('docs.index', ['token' => $token]) }}" class="btn btn-outline-white"><i class="bi bi-question-circle"></i> Guida Utente</a>
+            <a href="{{ route('campaigns.index', ['token' => $token]) }}" class="btn btn-outline-white @if(!$account) disabled @endif" @if(!$account) aria-disabled="true" @endif><i class="bi bi-archive"></i> Storico Campagne</a>
+            <a href="{{ route('templates.index', ['token' => $token]) }}" class="btn btn-outline-white @if(!$account) disabled @endif" @if(!$account) aria-disabled="true" @endif><i class="bi bi-card-list"></i> Gestisci Template</a>
         </div>
 
         <main class="card shadow-sm">
             <div class="card-body p-4 p-md-5">
-                <form id="campaignForm" action="{{ route('campaigns.launch.unified') }}" method="POST">
+                <form id="campaignForm" action="{{ route('campaigns.launch.unified', ['token' => $token]) }}" method="POST">
                     @csrf
 
                     {{-- Session and validation errors will be handled by Swal at the end of the body --}}
@@ -111,7 +113,7 @@
                     <!-- Sezione Upload File (visibile solo se si sceglie l'opzione file) -->
                     <div id="file_upload_section" class="mb-4" style="display: none;">
                         <label for="recipient_file" class="form-label">Carica File Destinatari</label>
-                        <input class="form-control form-control-lg" type="file" id="recipient_file" name="recipient_file" accept=".csv" @if(!$account) disabled @endif>
+                        <input class="form-control form-control-lg" type="file" id="recipient_file" name="recipient_file" accept=".csv,.xls,.xlsx" @if(!$account) disabled @endif>
                         <div class="form-text mt-2">
                             Il file verrà caricato automaticamente. Sono ammessi solo file CSV con separatore punto e virgola (;).
                         </div>
@@ -217,25 +219,16 @@
                         <h5 class="modal-title" id="mappingModalLabel"><i class="bi bi-diagram-3"></i> Mappatura Colonne File</h5>
                     </div>
                     <div class="modal-body">
-                        <p>Associa le colonne del tuo file ai campi richiesti per l'invio.</p>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="map_name" class="form-label">Campo "Nominativo"</label>
-                                <select id="map_name" name="map_name" class="form-select" required></select>
-                                <div class="form-text">Questo campo verrà usato per le variabili come <code>{{1}}</code>.</div>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="map_phone" class="form-label fw-bold">Campo "Numero Cellulare" <span class="text-danger">*</span></label>
-                                <select id="map_phone" name="map_phone" class="form-select" required></select>
-                                <div class="form-text">Questo campo è obbligatorio per l'invio.</div>
-                            </div>
+                        <p>Associa le colonne del tuo file ai campi richiesti. Il campo "Numero Cellulare" è obbligatorio.</p>
+                        <div class="mb-3" id="phone-mapping-container">
+                            <label for="map_phone" class="form-label fw-bold">Campo "Numero Cellulare" <span class="text-danger">*</span></label>
+                            <select id="map_phone" name="map_phone" class="form-select" required></select>
                         </div>
+                        <div id="variable-mappings-container" class="mt-4"></div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="document.getElementById('recipient_file').value = ''">Annulla</button>
-                        <button type="button" id="validate-button" class="btn btn-primary">
-                            <i class="bi bi-shield-check"></i> Valida File
-                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                        <button type="button" id="validate-button" class="btn btn-primary"><i class="bi bi-shield-check"></i> Valida File</button>
                     </div>
                 </div>
             </div>
@@ -261,7 +254,7 @@
         </div>
 
         <footer class="mt-5 text-center">
-            WA Sender v1.0 | <a href="{{ route('privacy.policy') }}" class="text-white" target="_blank">Informativa Privacy</a>
+            WA Sender v1.0 | <a href="{{ route('privacy.policy', ['token' => $token]) }}" class="text-white" target="_blank">Informativa Privacy</a>
         </footer>
     </div>
 
@@ -277,7 +270,7 @@
             const previewBox = document.getElementById('message_preview');
             const defaultPreviewText = previewBox.textContent;
             const templatesData = @json($templates);
-            const csrfToken = document.querySelector('input[name="_token"]').value;
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             const hasAccount = {{ $account ? 'true' : 'false' }};
 
             // AJAX Flow elements
@@ -290,6 +283,8 @@
             const validationModalEl = document.getElementById('validationReportModal');
             const validationModal = new bootstrap.Modal(validationModalEl);
             const mainLaunchButton = document.getElementById('main-launch-button');
+            const jwtToken = document.querySelector('meta[name="jwt-token"]').getAttribute('content');
+            let requiredVars = 0;
 
             // Helper to show alerts using SweetAlert2
             function showSwalAlert(title, text, icon = 'error') {
@@ -324,6 +319,22 @@
             if (templateSelect.value) templateSelect.dispatchEvent(new Event('change'));
 
 
+            function updateRequiredVars(template) {
+                requiredVars = 0; // Reset
+                if (!template) return;
+
+                const bodyComponent = template.components.find(c => c.type === 'BODY');
+                if (bodyComponent && bodyComponent.text) {
+                    const matches = bodyComponent.text.matchAll(/\{\{(\d+)\}\}/g);
+                    let maxVar = 0;
+                    for (const match of matches) {
+                        const varNum = parseInt(match[1], 10);
+                        if (varNum > maxVar) maxVar = varNum;
+                    }
+                    requiredVars = maxVar;
+                }
+            }
+
             templateSelect.addEventListener('change', (event) => {
                 const selectedTemplateName = event.target.value;
                 if (!selectedTemplateName) {
@@ -334,13 +345,13 @@
 
                 const template = templatesData.find(t => t.name === selectedTemplateName);
 
+                updateRequiredVars(template);
+
                 if (template) {
                     const bodyComponent = template.components.find(c => c.type === 'BODY');
                     if (bodyComponent) {
                         previewBox.className = 'text-body';
-                        let previewText = bodyComponent.text.replace(/\{\{(\d+)\}\}/g, (match, p1) => {
-                            return `<strong class="text-primary">[Variabile ${p1}]</strong>`;
-                        });
+                        let previewText = bodyComponent.text.replace(/\{\{(\d+)\}\}/g, `<strong class="text-primary">[Variabile $1]</strong>`);
                         previewBox.innerHTML = previewText;
                     }
                 } else {
@@ -354,14 +365,12 @@
             const testRecipientInput = document.getElementById('test_recipient');
             const testFeedback = document.getElementById('test-send-feedback');
 
-            sendTestBtn.addEventListener('click', async () => {
+            sendTestBtn.addEventListener('click', async function() {
                 const recipient = testRecipientInput.value;
                 const templateName = templateSelect.value;
 
                 // Validazione input
                 if (!recipient || !templateName ) {
-                    testFeedback.textContent = 'Per favore, seleziona un template e inserisci un numero di telefono.';
-                    testFeedback.className = 'form-text mt-2 text-danger';
                     return;
                 }
 
@@ -401,10 +410,12 @@
                             'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': csrfToken,
                             'Accept': 'application/json',
+                            'Authorization': `Bearer ${jwtToken}`,
                         },
                         body: JSON.stringify({
                             recipient: recipient,
                             message_template: templateName,
+                            variable_count: requiredVars,
                         })
                     });
 
@@ -427,7 +438,7 @@
                     sendTestBtn.innerHTML = `<i class="bi bi-whatsapp"></i> Invia Messaggio di Prova`;
                 }
             });
-
+            
             // --- Nuovo Flusso AJAX per Upload File ---
 
             fileInput.addEventListener('change', (event) => {
@@ -448,6 +459,8 @@
 
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', '{{ route("campaigns.ajax.upload") }}', true);
+                xhr.setRequestHeader('Authorization', `Bearer ${jwtToken}`);
+                xhr.setRequestHeader('Accept', 'application/json');
 
                 xhr.upload.onprogress = (e) => {
                     if (e.lengthComputable) {
@@ -480,25 +493,48 @@
             });
 
             function populateMappingModal(headers) {
-                const nameSelect = document.getElementById('map_name');
-                const phoneSelect = document.getElementById('map_phone');
+                const phoneContainer = document.getElementById('phone-mapping-container');
+                const varContainer = document.getElementById('variable-mappings-container');
+
                 const defaultOption = '<option value="" selected disabled>Scegli colonna...</option>';
-                nameSelect.innerHTML = defaultOption;
+                
+                const phoneSelect = phoneContainer.querySelector('#map_phone');
                 phoneSelect.innerHTML = defaultOption;
+                varContainer.innerHTML = '';
+
                 headers.forEach(header => {
                     const option = `<option value="${header}">${header}</option>`;
-                    nameSelect.innerHTML += option;
                     phoneSelect.innerHTML += option;
                 });
+
+                if (requiredVars > 0) {
+                    let newHtml = '<hr><h5>Mappatura Variabili Template</h5>';
+                    for (let i = 1; i <= requiredVars; i++) {
+                        const isFirstVar = i === 1;
+                        const label = isFirstVar
+                            ? `Nominativo (per Variabile <code>@{{1}}</code>)`
+                            : `Variabile <code>@{{${i}}}</code>`;
+
+                        newHtml += `
+                            <div class="mb-3">
+                                <label for="map_var_${i}" class="form-label">${label}</label>
+                                <select id="map_var_${i}" name="map_vars[]" class="form-select map-var-select" required>
+                                    ${defaultOption}
+                                    ${headers.map(h => `<option value="${h}">${h}</option>`).join('')}
+                                </select>
+                                ${isFirstVar ? '<div class="form-text">Questa colonna verrà usata come nome di riferimento del contatto.</div>' : ''}
+                            </div>`;
+                    }
+                    varContainer.innerHTML = newHtml;
+                }
             }
 
             document.getElementById('validate-button').addEventListener('click', async function() {
                 const button = this;
-                const mapName = document.getElementById('map_name').value;
                 const mapPhone = document.getElementById('map_phone').value;
+                const mapVars = Array.from(document.querySelectorAll('.map-var-select')).map(s => s.value);
                 const filePath = filePathInput.value;
-
-                if (!mapName || !mapPhone) {
+                if (!mapPhone) {
                     Swal.fire({
                         icon: 'warning',
                         title: 'Campi Mancanti',
@@ -513,8 +549,13 @@
                 try {
                     const response = await fetch('{{ route("campaigns.ajax.validate") }}', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                        body: JSON.stringify({ file_path: filePath, map_name: mapName, map_phone: mapPhone })
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'Accept': 'application/json',
+                            'Authorization': `Bearer ${jwtToken}`,
+                        },
+                        body: JSON.stringify({ file_path: filePath, map_phone: mapPhone, map_vars: mapVars })
                     });
                     const result = await response.json();
                     if (!response.ok) throw new Error(result.message);

@@ -1,75 +1,90 @@
-{{-- Assumendo un layout base --}}
-<div class="container" style="font-family: sans-serif; padding: 2rem;">
-    <h1>Crea Nuovo Template</h1>
-    <p>Invia un nuovo template a Meta per l'approvazione. Ricorda di usare le variabili come <code>{{1}}</code>, <code>{{2}}</code>, etc. per i contenuti dinamici.</p>
-    <a href="{{ route('templates.index') }}" style="display: inline-block; margin-bottom: 1.5rem; color: #6c757d; text-decoration: none;">Annulla e torna alla lista</a>
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Crea Nuovo Template - FilleaOFFICE WhatsApp</title>
 
-    @if (session('success'))
-        <div style="background-color: #d1e7dd; color: #0f5132; padding: 1rem; border: 1px solid #badbcc; border-radius: 0.25rem; margin-bottom: 1rem;">
-            {{ session('success') }}
-        </div>
-    @endif
-    @if (session('error'))
-        <div style="background-color: #f8d7da; color: #842029; padding: 1rem; border: 1px solid #f5c2c7; border-radius: 0.25rem; margin-bottom: 1rem;">
-            {{ session('error') }}
-        </div>
-    @endif
-    @if ($errors->any())
-        <div style="background-color: #f8d7da; color: #842029; padding: 1rem; border: 1px solid #f5c2c7; border-radius: 0.25rem; margin-bottom: 1rem;">
-            <strong>Sono presenti errori di validazione:</strong>
-            <ul style="margin-top: 0.5rem; margin-bottom: 0;">
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
-        </div>
-    @endif
+    <meta name="jwt-token" content="{{ $token }}">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <form action="{{ route('templates.store') }}" method="POST">
-        @csrf
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body { background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <div class="container my-5" style="max-width: 800px;">
+        <header class="mb-5 text-center">
+            <h1 class="display-5 fw-bold"><i class="bi bi-plus-square-dotted"></i> Crea Nuovo Template</h1>
+            <p class="lead text-secondary">Invia un nuovo template a Meta per l'approvazione.</p>
+        </header>
 
-        <div style="margin-bottom: 1rem;">
-            <label for="whatsapp_account_id" style="display: block; margin-bottom: 0.5rem;">Account WhatsApp*</label>
-            <select id="whatsapp_account_id" name="whatsapp_account_id" style="width: 100%; padding: 0.375rem 0.75rem; border: 1px solid #ced4da; border-radius: 0.25rem;" required @if($accounts->isEmpty()) disabled @endif>
-                <option value="">Scegli per quale account creare il template...</option>
-                @foreach($accounts as $account)
-                    <option value="{{ $account->id }}" {{ old('whatsapp_account_id') == $account->id ? 'selected' : '' }}>
-                        {{ $account->name }} ({{ $account->phone_number_display }})
-                    </option>
-                @endforeach
-            </select>
-            @if($accounts->isEmpty())
-                <div style="font-size: 0.875em; color: #dc3545; margin-top: 0.25rem;">Nessun account collegato. Impossibile creare template.</div>
-            @endif
-        </div>
+        <main class="card shadow-sm">
+            <div class="card-body p-4 p-md-5">
+                <form action="{{ route('templates.store', ['token' => $token]) }}" method="POST">
+                    @csrf
 
-        <div style="margin-bottom: 1rem;">
-            <label for="name" style="display: block; margin-bottom: 0.5rem;">Nome Template*</label>
-            <input type="text" id="name" name="name" value="{{ old('name') }}" required style="width: 100%; padding: 0.375rem 0.75rem; border: 1px solid #ced4da; border-radius: 0.25rem;">
-            <div style="font-size: 0.875em; color: #6c757d; margin-top: 0.25rem;">Solo lettere minuscole, numeri e underscore (es. <code>promo_pasqua_24</code>).</div>
-        </div>
+                    @if(session('error'))
+                        <div class="alert alert-danger">{{ session('error') }}</div>
+                    @endif
+                    @if ($errors->any())
+                        <div class="alert alert-danger">
+                            <h5 class="alert-heading">Sono stati riscontrati degli errori:</h5>
+                            <ul class="mb-0">
+                                @foreach ($errors->all() as $error)
+                                    <li>{{ $error }}</li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
 
-        <div style="margin-bottom: 1rem;">
-            <label for="category" style="display: block; margin-bottom: 0.5rem;">Categoria*</label>
-            <select id="category" name="category" required style="width: 100%; padding: 0.375rem 0.75rem; border: 1px solid #ced4da; border-radius: 0.25rem;">
-                <option value="MARKETING" {{ old('category') == 'MARKETING' ? 'selected' : '' }}>Marketing</option>
-                <option value="UTILITY" {{ old('category') == 'UTILITY' ? 'selected' : '' }}>Utility</option>
-                <option value="AUTHENTICATION" {{ old('category') == 'AUTHENTICATION' ? 'selected' : '' }}>Autenticazione</option>
-            </select>
-        </div>
+                    <div class="mb-4">
+                        <label for="whatsapp_account_id" class="form-label">Account di Invio</label>
+                        <select name="whatsapp_account_id" id="whatsapp_account_id" class="form-select bg-light" readonly disabled>
+                            @foreach($accounts as $account)
+                                <option value="{{ $account->id }}" selected>{{ $account->name }} ({{ $account->business_name }})</option>
+                            @endforeach
+                        </select>
+                        {{-- Hidden input to actually send the value --}}
+                        <input type="hidden" name="whatsapp_account_id" value="{{ $accounts[0]->id }}">
+                    </div>
 
-        <div style="margin-bottom: 1rem;">
-            <label for="language_code" style="display: block; margin-bottom: 0.5rem;">Lingua*</label>
-            <input type="text" id="language_code" name="language_code" value="{{ old('language_code', 'it') }}" required style="width: 100%; padding: 0.375rem 0.75rem; border: 1px solid #ced4da; border-radius: 0.25rem;">
-            <div style="font-size: 0.875em; color: #6c757d; margin-top: 0.25rem;">Codice lingua, es. <code>it</code>, <code>en_US</code>.</div>
-        </div>
+                    <div class="mb-4">
+                        <label for="name" class="form-label">Nome Template</label>
+                        <input type="text" name="name" id="name" class="form-control" value="{{ old('name') }}" required placeholder="es. promo_giugno_24">
+                        <div class="form-text">Solo lettere minuscole, numeri e underscore (<code>_</code>).</div>
+                    </div>
 
-        <div style="margin-bottom: 1.5rem;">
-            <label for="body_text" style="display: block; margin-bottom: 0.5rem;">Testo del Messaggio (Body)*</label>
-            <textarea id="body_text" name="body_text" rows="5" required style="width: 100%; padding: 0.375rem 0.75rem; border: 1px solid #ced4da; border-radius: 0.25rem;">{{ old('body_text') }}</textarea>
-            <div style="font-size: 0.875em; color: #6c757d; margin-top: 0.25rem;">Esempio: <code>Ciao {{1}}, il tuo codice di verifica è {{2}}.</code></div>
-        </div>
+                    <div class="mb-4">
+                        <label for="category" class="form-label">Categoria</label>
+                        <select name="category" id="category" class="form-select" required>
+                            <option value="MARKETING" @if(old('category') == 'MARKETING') selected @endif>Marketing (Promozioni, offerte)</option>
+                            <option value="UTILITY" @if(old('category') == 'UTILITY') selected @endif>Utility (Notifiche, aggiornamenti)</option>
+                            <option value="AUTHENTICATION" @if(old('category') == 'AUTHENTICATION') selected @endif>Autenticazione (Codici OTP)</option>
+                        </select>
+                    </div>
 
-        <button type="submit" style="padding: 0.5rem 1rem; background-color: #0d6efd; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Invia per Approvazione</button>
-    </form>
-</div>
+                    <div class="mb-4">
+                        <label for="language_code" class="form-label">Codice Lingua</label>
+                        <input type="text" name="language_code" id="language_code" class="form-control" value="{{ old('language_code', 'it') }}" required>
+                        <div class="form-text">Usa 'it' per l'italiano.</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="body_text" class="form-label">Testo del Messaggio</label>
+                        <textarea name="body_text" id="body_text" class="form-control" rows="5" required placeholder="Ciao {{1}}, ti scriviamo per informarti che...">{{ old('body_text') }}</textarea>
+                        <div class="form-text">Usa <code>@{{1}}</code>, <code>@{{2}}</code>, etc. per inserire le variabili che verranno sostituite in fase di invio.</div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-5">
+                        <a href="{{ route('templates.index', ['token' => $token]) }}" class="btn btn-secondary">Annulla</a>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i> Invia per Approvazione</button>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

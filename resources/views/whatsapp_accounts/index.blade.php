@@ -6,7 +6,7 @@
     <p>Questi sono gli account WhatsApp Business che hai collegato alla piattaforma. Puoi usarli per creare e inviare campagne.</p>
 
     <div style="margin: 1.5rem 0;">
-        <a href="{{ route('whatsapp-accounts.create') }}" style="padding: 0.5rem 1rem; background-color: #0d6efd; color: white; text-decoration: none; border-radius: 0.25rem;">Collega Nuovo Account</a>
+        <a href="{{ route('whatsapp-accounts.create', ['token' => $token]) }}" style="padding: 0.5rem 1rem; background-color: #0d6efd; color: white; text-decoration: none; border-radius: 0.25rem;">Collega Nuovo Account</a>
     </div>
 
     @if (session('success'))
@@ -43,7 +43,7 @@
                         <td style="padding: 0.5rem;">{{ $account->phone_number_display }}</td>
                         <td style="padding: 0.5rem;">{{ $account->created_at->format('d/m/Y H:i') }}</td>
                         <td style="padding: 0.5rem;">
-                            <form action="{{ route('whatsapp-accounts.destroy', $account) }}" method="POST" onsubmit="return confirm('Sei sicuro di voler rimuovere questo account?');">
+                            <form action="{{ route('whatsapp-accounts.destroy', ['whatsapp_account' => $account, 'token' => $token]) }}" method="POST" onsubmit="return confirm('Sei sicuro di voler rimuovere questo account?');">
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" style="padding: 0.25rem 0.5rem; background-color: #dc3545; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">Rimuovi</button>

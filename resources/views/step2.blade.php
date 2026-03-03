@@ -52,7 +52,7 @@
                     </div>
 
                     @if($campaignData['recipient_source'] === 'file_upload')
-                        <form action="{{ route('campaigns.validate') }}" method="POST">
+                        <form action="{{ route('campaigns.validate', ['token' => $token]) }}" method="POST">
                             @csrf
                             {{-- SEZIONE MAPPING FILE --}}
                             <div id="file-mapping-section">
@@ -64,28 +64,34 @@
                                 </div>
 
                                 @if(isset($file_headers) && !empty($file_headers))
-                                    <div class="row mb-3">
-                                        <div class="col-md-6">
-                                            <label for="map_name" class="form-label">Campo "Nominativo"</label>
-                                            <select id="map_name" name="map_name" class="form-select" required>
-                                                <option value="" selected disabled>Scegli colonna per il Nominativo...</option>
-                                                @foreach($file_headers as $header)
-                                                    <option value="{{ $header }}">{{ $header }}</option>
-                                                @endforeach
-                                            </select>
-                                            <div class="form-text">Questo campo verrà usato per le variabili come <code>@{{1}}</code> nel messaggio.</div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label for="map_phone" class="form-label fw-bold">Campo "Numero Cellulare" <span class="text-danger">*</span></label>
-                                            <select id="map_phone" name="map_phone" class="form-select" required>
-                                                <option value="" selected disabled>Scegli colonna per il Cellulare...</option>
-                                                @foreach($file_headers as $header)
-                                                    <option value="{{ $header }}">{{ $header }}</option>
-                                                @endforeach
-                                            </select>
-                                            <div class="form-text">Questo campo è obbligatorio per l'invio.</div>
-                                        </div>
+                                    <div class="mb-3">
+                                        <label for="map_phone" class="form-label fw-bold">Campo "Numero Cellulare" <span class="text-danger">*</span></label>
+                                        <select id="map_phone" name="map_phone" class="form-select" required>
+                                            <option value="" selected disabled>Scegli colonna per il Cellulare...</option>
+                                            @foreach($file_headers as $header)
+                                                <option value="{{ $header }}">{{ $header }}</option>
+                                            @endforeach
+                                        </select>
+                                        <div class="form-text">Questo campo è obbligatorio per l'invio.</div>
                                     </div>
+
+                                    @if(isset($variable_count) && $variable_count > 0)
+                                        <hr><h4 class="h5">Mappatura Variabili Template</h4>
+                                        @for ($i = 1; $i <= $variable_count; $i++)
+                                        @php($isFirstVar = $i === 1)
+                                        @php($label = $isFirstVar ? "Nominativo (per Variabile <code>@{{1}}</code>)" : "Variabile <code>@{{{$i}}}</code>")
+                                        <div class="mb-3">
+                                            <label for="map_var_{{ $i }}" class="form-label">{!! $label !!}</label>
+                                            <select id="map_var_{{ $i }}" name="map_vars[]" class="form-select" required>
+                                                <option value="" selected disabled>Scegli colonna per @{{ {{ $i }} }}</option>
+                                                @foreach($file_headers as $header)
+                                                    <option value="{{ $header }}">{{ $header }}</option>
+                                                @endforeach
+                                            </select>
+                                            @if($isFirstVar)<div class="form-text">Questa colonna verrà usata come nome di riferimento del contatto.</div>@endif
+                                        </div>
+                                        @endfor
+                                    @endif
                                 @else
                                     <div class="alert alert-warning">Impossibile leggere le colonne dal file. Assicurati che la prima riga contenga le intestazioni.</div>
                                 @endif
@@ -93,7 +99,7 @@
                             <hr class="my-5">
                             {{-- Pulsanti Azione --}}
                             <div class="d-flex justify-content-between">
-                                <a href="{{ route('campaigns.create') }}" class="btn btn-secondary">
+                                <a href="{{ route('campaigns.create', ['token' => $token]) }}" class="btn btn-secondary">
                                     <i class="bi bi-arrow-left"></i> Modifica Campagna
                                 </a>
                                 <button type="submit" class="btn btn-primary btn-lg" @if(!isset($file_headers) || empty($file_headers)) disabled @endif>
@@ -137,7 +143,7 @@
 
                             {{-- Pulsanti Azione --}}
                             <div class="d-flex justify-content-between">
-                                <a href="{{ route('campaigns.create') }}" class="btn btn-secondary">
+                                <a href="{{ route('campaigns.create', ['token' => $token]) }}" class="btn btn-secondary">
                                     <i class="bi bi-arrow-left"></i> Modifica Campagna
                                 </a>
                                 <button type="submit" class="btn btn-success btn-lg">
@@ -207,7 +213,7 @@
                         </div>
                         <div class="modal-footer justify-content-between">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-                            <form action="{{ route('campaigns.launch') }}" method="POST">
+                            <form action="{{ route('campaigns.launch', ['token' => $token]) }}" method="POST">
                                 @csrf
                                 <button type="submit" class="btn btn-success" @if($report['valid_count'] == 0) disabled @endif>
                                     <i class="bi bi-send-check"></i> Conferma e Avvia Invio a {{ $report['valid_count'] }} Contatti

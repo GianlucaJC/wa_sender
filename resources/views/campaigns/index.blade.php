@@ -4,6 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Storico Campagne - FilleaOFFICE WhatsApp</title>
+
+    <!-- Token di autenticazione JWT per le chiamate API -->
+    <meta name="jwt-token" content="{{ $token }}">
+    <!-- Token CSRF per la protezione contro Cross-Site Request Forgery -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
@@ -54,9 +60,9 @@
                                     </td>
                                     <td>{{ $campaign->created_at->format('d/m/Y H:i') }}</td>
                                     <td class="text-end">
-                                        <a href="{{ route('campaigns.progress', $campaign) }}" class="btn btn-sm btn-info">Dettagli</a>
+                                        <a href="{{ route('campaigns.progress', ['campaign' => $campaign, 'token' => $token]) }}" class="btn btn-sm btn-info">Dettagli</a>
                                         @if($campaign->status === 'processing')
-                                            <form action="{{ route('campaigns.stop', $campaign) }}" method="POST" class="d-inline-block" onsubmit="return confirm('Sei sicuro di voler interrompere questa campagna?');">
+                                            <form action="{{ route('campaigns.stop', ['campaign' => $campaign, 'token' => $token]) }}" method="POST" class="d-inline-block" onsubmit="return confirm('Sei sicuro di voler interrompere questa campagna?');">
                                                 @csrf
                                                 <button type="submit" class="btn btn-sm btn-danger">Interrompi</button>
                                             </form>
@@ -74,12 +80,12 @@
 
                 @if ($campaigns->hasPages())
                     <div class="mt-4 d-flex justify-content-center">
-                        {{ $campaigns->links() }}
+                        {{ $campaigns->appends(['token' => $token])->links() }}
                     </div>
                 @endif
             </div>
             <div class="card-footer text-center">
-                <a href="{{ route('campaigns.create') }}" class="btn btn-primary">
+                <a href="{{ route('campaigns.create', ['token' => $token]) }}" class="btn btn-primary">
                     <i class="bi bi-plus-circle"></i> Crea Nuova Campagna
                 </a>
             </div>

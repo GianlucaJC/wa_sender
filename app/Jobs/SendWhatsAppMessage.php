@@ -73,31 +73,29 @@ class SendWhatsAppMessage implements ShouldQueue
         // Costruzione del payload per un messaggio TEMPLATE
         // Grazie al cast 'array' nel modello CampaignRecipient, non è più necessario decodificare manualmente.
         // Laravel lo fa in automatico quando si accede all'attributo.
-        $params = $this->recipient->params;
+        $params = $this->recipient->params ?? [];
+        $bodyParameters = [];
+        foreach ($params as $param) {
+            $bodyParameters[] = [
+                'type' => 'text',
+                'text' => (string) $param, // L'API si aspetta sempre una stringa
+            ];
+        }
+
         $templatePayload = [
             'messaging_product' => 'whatsapp',
             'to' => $this->recipient->phone_number,
             'type' => 'template',
             'template' => [
                 'name' => $campaign->message_template,
-                'language' => [
-                    'code' => 'it' // Assumiamo 'it', da rendere configurabile in futuro
-                ],
-                'components' => [
-                    [
-                        'type' => 'body',
-                        'parameters' => [
-                            [
-                                'type' => 'text',
-                                // Usiamo il nome del destinatario come primo parametro
-                                'text' => $params['name'] ?? ''
-                            ]
-                            // Qui andrebbero aggiunti altri parametri se il template li richiede
-                        ]
-                    ]
-                ]
+                'language' => ['code' => 'it'], // Assumiamo 'it', da rendere configurabile in futuro
             ]
         ];
+
+        // Aggiungiamo i parametri solo se ce ne sono, come richiesto dall'API di Meta
+        if (!empty($bodyParameters)) {
+            $templatePayload['template']['components'] = [['type' => 'body', 'parameters' => $bodyParameters]];
+        }
 
         try {
             $response = Http::withToken($token)->post($url, $templatePayload);

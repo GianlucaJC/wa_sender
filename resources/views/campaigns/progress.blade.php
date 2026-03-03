@@ -4,6 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Avanzamento Campagna - FilleaOFFICE WhatsApp</title>
+
+    <!-- Token di autenticazione JWT per le chiamate API -->
+    <meta name="jwt-token" content="{{ $token }}">
+    <!-- Token CSRF per la protezione contro Cross-Site Request Forgery -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
@@ -27,9 +33,9 @@
             </div>
           
             <div class="card-body p-4">
-            @if ($campaign->status === 'processing')
+            @if ($campaign->status === 'processing' || $campaign->status === 'pending')
                 <div class="my-4">
-                    <form action="{{ route('campaigns.stop', $campaign) }}" method="POST" onsubmit="return confirm('Sei sicuro di voler interrompere questa campagna? I messaggi non ancora inviati verranno annullati.');">
+                    <form action="{{ route('campaigns.stop', ['campaign' => $campaign, 'token' => $token]) }}" method="POST" onsubmit="return confirm('Sei sicuro di voler interrompere questa campagna? I messaggi non ancora inviati verranno annullati.');">
                         @csrf
                         <button type="submit" class="btn btn-danger">
                             <i class="bi bi-stop-circle"></i> Interrompi Campagna
@@ -92,8 +98,8 @@
 
             </div>
             <div class="card-footer text-center">
-                <a href="{{ route('campaigns.create') }}" class="btn btn-primary">
-                    <i class="bi bi-plus-circle"></i> Nuova Campagna
+                <a href="{{ route('campaigns.index', ['token' => $token]) }}" class="btn btn-secondary">
+                    <i class="bi bi-archive"></i> Elenco Campagne
                 </a>
             </div>
         </main>
@@ -104,6 +110,7 @@
             const panel = document.getElementById('progress-panel');
             const campaignId = panel.dataset.campaignId;
             const statusUrl = `/campaigns/${campaignId}/status`;
+            const jwtToken = document.querySelector('meta[name="jwt-token"]').getAttribute('content');
 
             const statusEl = document.getElementById('campaign-status');
             const sentCountEl = document.getElementById('sent-count');
@@ -124,7 +131,12 @@
 
             async function fetchStatus() {
                 try {
-                    const response = await fetch(statusUrl);
+                    const response = await fetch(statusUrl, {
+                        headers: {
+                            'Authorization': `Bearer ${jwtToken}`,
+                            'Accept': 'application/json'
+                        }
+                    });
                     const data = await response.json();
                     
                     const total = data.total_recipients || 0;

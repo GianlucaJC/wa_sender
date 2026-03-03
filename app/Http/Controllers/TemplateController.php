@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\WhatsappAccount;
+use Illuminate\Validation\Rule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -17,12 +18,6 @@ class TemplateController extends Controller
      */
     public function index()
     {
-        // Simulazione di un controllo di autorizzazione.
-        $is_admin = true;
-        if (!$is_admin) {
-            abort(403, 'Azione non autorizzata.');
-        }
-
         // Recupera l'account dell'utente corrente
         $wa_id = session('wa_id');
         $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
@@ -51,7 +46,9 @@ class TemplateController extends Controller
         }
 
         return view('templates.index', [
-            'is_admin' => $is_admin, 'templates' => $templates, 'error' => $error
+            'templates' => $templates,
+            'error' => $error,
+            'token' => session('jwt_token'),
         ]);
     }
 
@@ -62,14 +59,19 @@ class TemplateController extends Controller
      */
     public function create()
     {
-        // Simulazione di un controllo di autorizzazione.
-        // In un'applicazione reale, questo verrebbe da un sistema di autenticazione (es. $user->isAdmin()).
-        $is_admin = true;
-        $accounts = WhatsappAccount::all();
+        // Recupera l'account dell'utente corrente
+        $wa_id = session('wa_id');
+        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+
+        if (!$account) {
+            return redirect()->route('campaigns.create', ['token' => session('jwt_token')])
+                ->with('error', 'Nessun account WhatsApp associato. Impossibile creare template.');
+        }
 
         return view('templates.create', [
-            'is_admin' => $is_admin,
-            'accounts' => $accounts,
+            // Passiamo una collezione con un solo account per mantenere la compatibilità con la vista.
+            'accounts' => [$account],
+            'token' => session('jwt_token'),
         ]);
     }
 
@@ -81,18 +83,21 @@ class TemplateController extends Controller
      */
     public function store(Request $request)
     {
-        // Simulazione di un controllo di autorizzazione server-side.
-        $is_admin = true;
-        if (!$is_admin) {
-            abort(403, 'Azione non autorizzata.');
+        // Recupera l'account dell'utente corrente per l'autorizzazione.
+        $wa_id = session('wa_id');
+        if (!$wa_id) {
+            return redirect()->route('templates.create', ['token' => session('jwt_token')])->with('error', 'Sessione non valida. Impossibile salvare il template.')->withInput();
         }
 
         $validated = $request->validate([
-            'whatsapp_account_id' => 'required|exists:whatsapp_accounts,id',
+            // L'utente può creare template solo per il proprio account.
+            'whatsapp_account_id' => ['required', 'exists:whatsapp_accounts,id', Rule::in([$wa_id])],
             'name' => 'required|string|max:512|regex:/^[a-z0-9_]+$/',
             'category' => 'required|in:MARKETING,UTILITY,AUTHENTICATION',
             'language_code' => 'required|string|max:15',
             'body_text' => 'required|string',
+        ], [
+            'whatsapp_account_id.in' => 'Non sei autorizzato a creare template per questo account.'
         ]);
 
         $account = WhatsappAccount::findOrFail($validated['whatsapp_account_id']);
@@ -101,7 +106,7 @@ class TemplateController extends Controller
         $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
         if (!$token || !$wabaId) {
-            return back()->with('error', 'Credenziali non valide per l\'account selezionato.');
+            return redirect()->route('templates.create', ['token' => session('jwt_token')])->with('error', 'Credenziali non valide per l\'account selezionato.')->withInput();
         }
 
         $url = "https://graph.facebook.com/{$apiVersion}/{$wabaId}/message_templates";
@@ -127,15 +132,15 @@ class TemplateController extends Controller
                 $errorData = $response->json('error');
                 $errorMessage = $errorData['message'] ?? 'Errore sconosciuto dall\'API di Meta.';
                 Log::error('Errore invio template a Meta:', $errorData);
-                return back()->with('error', "Errore API: {$errorMessage}")->withInput();
+                return redirect()->route('templates.create', ['token' => session('jwt_token')])->with('error', "Errore API: {$errorMessage}")->withInput();
             }
 
             Log::info('Template inviato con successo a Meta per approvazione:', $response->json());
-            return back()->with('success', 'Template inviato con successo per l\'approvazione! Controlla lo stato nella dashboard di Meta.');
+            return redirect()->route('templates.index', ['token' => session('jwt_token')])->with('success', 'Template inviato con successo per l\'approvazione! Controlla lo stato nella dashboard di Meta.');
 
         } catch (Throwable $e) {
             Log::error('Eccezione durante l\'invio del template a Meta: ' . $e->getMessage());
-            return back()->with('error', 'Si è verificato un errore imprevisto. Controlla i log.')->withInput();
+            return redirect()->route('templates.create', ['token' => session('jwt_token')])->with('error', 'Si è verificato un errore imprevisto. Controlla i log.')->withInput();
         }
     }
 }

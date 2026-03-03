@@ -4,6 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Guida Utente - FilleaOFFICE WhatsApp</title>
+
+    <!-- Token di autenticazione JWT per le chiamate API -->
+    <meta name="jwt-token" content="{{ $token }}">
+    <!-- Token CSRF per la protezione contro Cross-Site Request Forgery -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
@@ -90,10 +96,12 @@
                             <p>Nella prima finestra, devi "mappare" i campi, cioè dire al sistema quale colonna del tuo file corrisponde a quale informazione.</p>
                             <ul>
                                 <li>
-                                    <strong>Campo "Nominativo":</strong> Seleziona la colonna che contiene il nome della persona (es. "Nome").
+                                    <strong>Campo "Numero Cellulare":</strong> <span class="text-danger fw-bold">Questo è il campo più importante.</span> Seleziona la colonna che contiene i numeri di telefono.
                                 </li>
                                 <li>
-                                    <strong>Campo "Numero Cellulare":</strong> <span class="text-danger fw-bold">Questo è il campo più importante.</span> Seleziona la colonna che contiene i numeri di telefono.
+                                    <strong>Campi Variabili (es. <code>@{{1}}</code>, <code>@{{2}}</code>):</strong> Se il template che hai scelto contiene delle variabili, il sistema ti mostrerà un menu a tendina per ognuna. Dovrai associare ogni variabile alla colonna corrispondente nel tuo file.
+                                    <br>
+                                    <strong>Nota:</strong> La prima variabile (<code>@{{1}}</code>) è speciale. Viene usata come <strong>"Nominativo"</strong> di riferimento per il contatto e di solito corrisponde alla colonna con il nome e cognome del destinatario.
                                 </li>
                             </ul>
                             <p>Una volta fatto, clicca su <strong>"Valida File"</strong>.</p>
@@ -136,7 +144,7 @@
             </div>
 
             <div class="text-center mt-5">
-                <a href="{{ route('campaigns.create') }}" class="btn btn-primary btn-lg">
+                <a href="{{ route('campaigns.create', ['token' => $token]) }}" class="btn btn-primary btn-lg">
                     <i class="bi bi-arrow-left"></i> Torna alla Creazione Campagna
                 </a>
             </div>

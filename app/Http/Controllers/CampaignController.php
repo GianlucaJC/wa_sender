@@ -9,6 +9,8 @@ use App\Models\WhatsappAccount;
 use Throwable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
+use Maatwebsite\Excel\HeadingRowImport;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -22,10 +24,6 @@ class CampaignController extends Controller
      */
     public function create()
     {
-
-    //TEST!!!!
-session(['wa_id' => 1]); 
-
         // Recupera l'ID dell'account dalla sessione. Se non c'è, usa l'account di simulazione come fallback.
         $wa_id = session('wa_id');
         $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
@@ -90,6 +88,7 @@ session(['wa_id' => 1]);
             'templates' => $templates,
             'templates_error' => $templates_error,
             'campaignData' => $campaignData,
+            'token' => session('jwt_token'),
         ]);
     }
 
@@ -177,7 +176,7 @@ session(['wa_id' => 1]);
         $request->session()->put('campaign_creation_data', $campaignData);
 
         // Reindirizza allo step 2
-        return redirect()->route('campaigns.step2');
+        return redirect()->route('campaigns.step2', ['token' => $request->session()->get('jwt_token')]);
     }
 
     /**
@@ -189,22 +188,42 @@ session(['wa_id' => 1]);
     public function step2(Request $request)
     {
         $campaignData = $request->session()->get('campaign_creation_data');
-
         if (!$campaignData) {
-            return redirect()->route('campaigns.create')->with('error', 'Sessione della campagna scaduta. Per favore, ricomincia.');
+            return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Sessione della campagna scaduta. Per favore, ricomincia.');
         }
+        $viewData = [
+            'campaignData' => $campaignData,
+            'token' => $request->session()->get('jwt_token'),
+        ];
 
-        $viewData = ['campaignData' => $campaignData];
+        // Se è stato selezionato un template, ne analizziamo le variabili
+        if (!empty($campaignData['message_template'])) {
+            // Dobbiamo recuperare di nuovo la lista dei template per trovare quello selezionato
+            // Questa logica è duplicata da create(), potrebbe essere estratta in un metodo privato in futuro.
+            $account = $request->session()->get('wa_id') ? WhatsappAccount::find($request->session()->get('wa_id')) : WhatsappAccount::where('name', 'SIMULATE')->first();
+            if ($account) {
+                $templateDetails = $this->fetchTemplateDetails($account, $campaignData['message_template']);
+                if ($templateDetails) {
+                    $bodyComponent = collect($templateDetails['components'])->firstWhere('type', 'BODY');
+                    if ($bodyComponent && isset($bodyComponent['text'])) {
+                        preg_match_all('/\{\{(\d+)\}\}/', $bodyComponent['text'], $matches);
+                        $viewData['variable_count'] = !empty($matches[1]) ? max($matches[1]) : 0;
+                    }
+                }
+            }
+            if (!isset($viewData['variable_count'])) {
+                $viewData['variable_count'] = 0;
+            }
+        }
 
         // Se la fonte è un file, leggiamo le intestazioni per il mapping
         if ($campaignData['recipient_source'] === 'file_upload' && !empty($campaignData['recipient_file_path'])) {
             try {
                 $filePath = storage_path('app/' . $campaignData['recipient_file_path']);
 
-                // AGGIUNTA DIAGNOSTICA: Verifichiamo se il file esiste fisicamente prima di leggerlo.
                 if (!file_exists($filePath)) {
                     Log::error('File non trovato nel percorso di storage: ' . $filePath);
-                    return redirect()->route('campaigns.create')->with('error', 'Errore critico: il file caricato non è stato trovato sul server. Potrebbe essere un problema di permessi sulla cartella `storage/app/recipient_files`.')->withInput($campaignData);
+                    return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Errore critico: il file caricato non è stato trovato sul server. Potrebbe essere un problema di permessi sulla cartella `storage/app/recipient_files`.')->withInput($campaignData);
                 }
 
                 $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
@@ -233,21 +252,27 @@ session(['wa_id' => 1]);
                     }
 
                     if (empty($viewData['file_headers'])) {
-                        return redirect()->route('campaigns.create')->with('error', 'Impossibile leggere le intestazioni dal file CSV. Assicurati che il file non sia vuoto, sia codificato correttamente e usi il punto e virgola (;) come separatore.')->withInput($campaignData);
+                        return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Impossibile leggere le intestazioni dal file CSV. Assicurati che il file non sia vuoto, sia codificato correttamente e usi il punto e virgola (;) come separatore.')->withInput($campaignData);
                     }
                 } elseif (in_array($extension, ['xls', 'xlsx'])) {
-                    // La logica per i file Excel è temporaneamente disabilitata per concentrarsi sui CSV.
-                    // Verrà implementata in un secondo momento.
-                    return redirect()->route('campaigns.create')->with('error', 'La lettura di file Excel (XLS, XLSX) non è ancora implementata. Per favore, usa un file CSV.')->withInput($campaignData);
+                    // Usa Maatwebsite/Excel per leggere gli header
+                    $headings = (new HeadingRowImport)->toArray($filePath);
+                    if (isset($headings[0][0])) {
+                        $viewData['file_headers'] = array_filter($headings[0][0]);
+                    }
+
+                    if (empty($viewData['file_headers'])) {
+                        return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Impossibile leggere le intestazioni dal file Excel. Assicurati che il file non sia vuoto e che la prima riga contenga le intestazioni.')->withInput($campaignData);
+                    }
                 } else {
                     // Questo caso non dovrebbe verificarsi grazie alla validazione, ma è una sicurezza in più.
-                    return redirect()->route('campaigns.create')->with('error', "Tipo di file non valido ('{$extension}'). Sono ammessi solo file CSV.")->withInput($campaignData);
+                    return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', "Tipo di file non valido ('{$extension}'). Sono ammessi solo file CSV.")->withInput($campaignData);
                 }
 
             } catch (Throwable $e) {
                 $debugMessage = ' Dettaglio tecnico: ' . $e->getMessage();
                 Log::error('Errore lettura file per mapping: ' . $e->getMessage());
-                return redirect()->route('campaigns.create')->with('error', 'Errore durante la lettura del file. Assicurati che sia in un formato valido (CSV, XLS, XLSX) e non sia corrotto.' . $debugMessage)->withInput($campaignData);
+                return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Errore durante la lettura del file. Assicurati che sia in un formato valido (CSV, XLS, XLSX) e non sia corrotto.' . $debugMessage)->withInput($campaignData);
             }
         }
 
@@ -263,8 +288,9 @@ session(['wa_id' => 1]);
     public function validateFile(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'map_name' => 'required|string',
             'map_phone' => 'required|string',
+            'map_vars' => 'present|array',
+            'map_vars.*' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -275,12 +301,11 @@ session(['wa_id' => 1]);
         $campaignData = $request->session()->get('campaign_creation_data');
 
         if (!$campaignData || $campaignData['recipient_source'] !== 'file_upload') {
-            return redirect()->route('campaigns.create')->with('error', 'Sessione della campagna scaduta o non valida.');
+            return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Sessione della campagna scaduta o non valida.');
         }
 
         $filePath = storage_path('app/' . $campaignData['recipient_file_path']);
-        $mapName = $validated['map_name'];
-        $mapPhone = $validated['map_phone'];
+        $mapVars = $validated['map_vars'];
 
         $totalRows = 0;
         $normalizedCount = 0;
@@ -289,48 +314,40 @@ session(['wa_id' => 1]);
 
         try {
             if (!is_readable($filePath)) {
-                return redirect()->route('campaigns.create')->with('error', 'Errore critico: il file dei destinatari non è leggibile. Controllare i permessi della cartella `storage`.');
+                return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Errore critico: il file dei destinatari non è leggibile. Controllare i permessi della cartella `storage`.');
             }
 
-            $handle = fopen($filePath, "r");
-            $headers = fgetcsv($handle, 0, ";");
-
-            $nameIndex = array_search($mapName, $headers);
-            $phoneIndex = array_search($mapPhone, $headers);
-
-            if ($phoneIndex === false) {
-                fclose($handle);
-                return redirect()->back()->with('error', 'La colonna del telefono mappata non è stata trovata nel file.')->withInput();
-            }
-
+            $dataCollection = $this->getFileDataAsCollection($filePath);
+            
             $lineNumber = 1;
-            while (($data = fgetcsv($handle, 0, ";")) !== FALSE) {
+            foreach ($dataCollection as $row) {
                 $lineNumber++;
                 $totalRows++;
 
-                $phoneNumberRaw = isset($data[$phoneIndex]) ? trim($data[$phoneIndex]) : '';
-                $name = ($nameIndex !== false && isset($data[$nameIndex])) ? trim($data[$nameIndex]) : '';
+                $phoneNumberRaw = isset($row[$mapPhone]) ? trim($row[$mapPhone]) : '';
+                
+                $params = [];
+                foreach ($mapVars as $varName) {
+                    $params[] = ($varName && isset($row[$varName])) ? trim($row[$varName]) : '';
+                }
 
                 $validationResult = $this->normalizeAndValidatePhoneNumber($phoneNumberRaw);
 
                 if ($validationResult['status'] === 'invalid') {
                     $invalidEntries[] = [
                         'line' => $lineNumber,
-                        'name' => $name,
+                        'name' => $params[0] ?? '',
                         'phone' => $phoneNumberRaw,
                         'reason' => $validationResult['reason'],
                     ];
                 } else {
-                    if ($validationResult['status'] === 'normalized') {
-                        $normalizedCount++;
-                    }
+                    if ($validationResult['status'] === 'normalized') $normalizedCount++;
                     $validRecipients[] = [
-                        'name' => $name,
                         'phone_number' => $validationResult['number'],
+                        'params' => $params,
                     ];
                 }
             }
-            fclose($handle);
 
             $report = [
                 'total_rows' => $totalRows,
@@ -344,11 +361,11 @@ session(['wa_id' => 1]);
             $request->session()->put('validated_recipients', $validRecipients);
 
             // Reindirizza indietro alla pagina step2, passando il report per mostrare il modal
-            return redirect()->route('campaigns.step2')->with('validation_report', $report);
+            return redirect()->route('campaigns.step2', ['token' => $request->session()->get('jwt_token')])->with('validation_report', $report);
 
         } catch (Throwable $e) {
             Log::error("Errore durante la validazione del file per la campagna: " . $e->getMessage());
-            return redirect()->route('campaigns.create')->with('error', 'Si è verificato un errore imprevisto durante la lettura del file.');
+            return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Si è verificato un errore imprevisto durante la lettura del file.');
         }
     }
 
@@ -364,13 +381,12 @@ session(['wa_id' => 1]);
         $validatedRecipients = $request->session()->get('validated_recipients');
 
         if (!$campaignData || empty($validatedRecipients)) {
-            return redirect()->route('campaigns.create')->with('error', 'Sessione scaduta o nessun destinatario valido trovato. Riprova.');
+            return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Sessione scaduta o nessun destinatario valido trovato. Riprova.');
         }
 
         $account = WhatsappAccount::first();
         if (!$account) {
-            // Anche se improbabile arrivare qui senza un account, è una sicurezza in più.
-            return redirect()->route('campaigns.create')->with('error', 'Nessun account WhatsApp configurato. Impossibile avviare la campagna.');
+            return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Nessun account WhatsApp configurato. Impossibile avviare la campagna.');
         }
 
         // 1. Crea la Campagna nel database
@@ -387,8 +403,8 @@ session(['wa_id' => 1]);
             $recipient = CampaignRecipient::create([
                 'campaign_id' => $campaign->id,
                 'phone_number' => $rec['phone_number'],
-                'name' => $rec['name'],
-                'params' => ['name' => $rec['name']],
+                'name' => $rec['params'][0] ?? null, // Usiamo il primo parametro come nome di riferimento
+                'params' => $rec['params'],
                 'status' => 'queued',
             ]);
             SendWhatsAppMessage::dispatch($recipient);
@@ -401,7 +417,7 @@ session(['wa_id' => 1]);
         $request->session()->forget(['campaign_creation_data', 'validated_recipients']);
 
         // 5. Reindirizza alla pagina di avanzamento
-        return redirect()->route('campaigns.progress', $campaign->id);
+        return redirect()->route('campaigns.progress', ['campaign' => $campaign->id, 'token' => $request->session()->get('jwt_token')]);
     }
 
     /**
@@ -409,7 +425,10 @@ session(['wa_id' => 1]);
      */
     public function showProgress(Campaign $campaign)
     {
-        return view('campaigns.progress', ['campaign' => $campaign]);
+        return view('campaigns.progress', [
+            'campaign' => $campaign,
+            'token' => session('jwt_token'),
+        ]);
     }
 
     /**
@@ -442,27 +461,34 @@ session(['wa_id' => 1]);
         // Se non c'è un account, la collezione sarà vuota.
         $campaigns = Campaign::where('whatsapp_account_id', $account?->id)->latest()->paginate(15);
 
-        return view('campaigns.index', ['campaigns' => $campaigns]);
+        // Controlla e aggiorna lo stato delle campagne "bloccate" in 'processing'
+        // prima di passarle alla vista.
+        foreach ($campaigns as $campaign) {
+            if ($campaign->status === 'processing' && ($campaign->processed_count + $campaign->failed_count) >= $campaign->total_recipients) {
+                $campaign->update(['status' => 'completed']);
+            }
+        }
+
+        return view('campaigns.index', [
+            'campaigns' => $campaigns,
+            'token' => session('jwt_token'),
+        ]);
     }
 
     /**
      * Mostra la pagina della documentazione.
-     *
-     * @return \Illuminate\View\View
      */
     public function showDocs()
     {
-        return view('docs.index');
+        return view('docs.index', ['token' => session('jwt_token')]);
     }
 
     /**
      * Mostra la pagina dell'informativa sulla privacy.
-     *
-     * @return \Illuminate\View\View
      */
     public function showPrivacyPolicy()
     {
-        return view('privacy.index');
+        return view('privacy.index', ['token' => session('jwt_token')]);
     }
 
     /**
@@ -517,6 +543,7 @@ session(['wa_id' => 1]);
             // 'whatsapp_account_id' => 'required|exists:whatsapp_accounts,id', // Rimosso, si usa l'account di default
             'recipient' => 'required|string|min:10', // Aggiunta una validazione base
             'message_template' => 'required|string',
+            'variable_count' => 'required|integer|min:0',
         ]);
 
         try {
@@ -556,16 +583,17 @@ session(['wa_id' => 1]);
                 'template' => [
                     'name' => $validated['message_template'],
                     'language' => ['code' => 'it'], // Assumiamo 'it', da rendere configurabile in futuro
-                    'components' => [
-                        [
-                            'type' => 'body',
-                            'parameters' => [
-                                ['type' => 'text', 'text' => 'Test'] // Parametro fittizio per la variabile {{1}}
-                            ]
-                        ]
-                    ]
                 ]
             ];
+
+            $bodyParameters = [];
+            for ($i = 1; $i <= $validated['variable_count']; $i++) {
+                $bodyParameters[] = ['type' => 'text', 'text' => "Test $i"];
+            }
+
+            if (!empty($bodyParameters)) {
+                $payload['template']['components'] = [['type' => 'body', 'parameters' => $bodyParameters]];
+            }
 
             $response = Http::withToken($token)->post($url, $payload);
 
@@ -599,9 +627,9 @@ session(['wa_id' => 1]);
     {
         $validator = Validator::make($request->all(), [
             // Usiamo 'mimetypes' per essere più flessibili. Alcuni sistemi operativi
-            // identificano i file CSV come 'text/plain' invece di 'text/csv'.
-            'recipient_file' => 'required|file|max:10240|mimetypes:text/csv,text/plain,application/csv',
-        ], ['recipient_file.mimetypes' => 'Sono ammessi solo file di tipo CSV.']);
+            // identificano i file CSV come 'text/plain'.
+            'recipient_file' => 'required|file|max:10240|mimetypes:text/csv,text/plain,application/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ], ['recipient_file.mimetypes' => 'Sono ammessi solo file di tipo CSV o Excel (XLS, XLSX).']);
 
         if ($validator->fails()) {
             return response()->json(['success' => false, 'message' => $validator->errors()->first()], 422);
@@ -609,21 +637,34 @@ session(['wa_id' => 1]);
 
         $file = $request->file('recipient_file');
         $filename = uniqid('file_', true) . '.' . $file->getClientOriginalExtension();
+        $extension = strtolower($file->getClientOriginalExtension());
         $filePath = $file->storeAs('recipient_files', $filename, 'local');
         $fullPath = storage_path('app/' . $filePath);
 
         $headers = [];
-        if (($handle = fopen($fullPath, "r")) !== FALSE) {
-            $headerData = fgetcsv($handle, 0, ";");
-            fclose($handle);
-            if ($headerData) {
-                $headers = array_filter($headerData, fn($h) => !is_null($h) && $h !== '');
+        if ($extension === 'csv') {
+            if (($handle = fopen($fullPath, "r")) !== FALSE) {
+                $headerData = fgetcsv($handle, 0, ";");
+                fclose($handle);
+                if ($headerData) {
+                    $headers = array_filter($headerData, fn($h) => !is_null($h) && $h !== '');
+                }
+            }
+        } elseif (in_array($extension, ['xls', 'xlsx'])) {
+            try {
+                $headings = (new HeadingRowImport)->toArray($fullPath);
+                if (isset($headings[0][0])) {
+                    $headers = array_filter($headings[0][0]);
+                }
+            } catch (\Exception $e) {
+                Storage::disk('local')->delete($filePath);
+                return response()->json(['success' => false, 'message' => 'Impossibile leggere il file Excel. Assicurati che non sia protetto da password o corrotto.'], 400);
             }
         }
 
         if (empty($headers)) {
             Storage::disk('local')->delete($filePath);
-            return response()->json(['success' => false, 'message' => 'Impossibile leggere le intestazioni dal file CSV. Assicurati che usi il punto e virgola (;) come separatore.'], 400);
+            return response()->json(['success' => false, 'message' => 'Impossibile leggere le intestazioni dal file. Assicurati che usi il punto e virgola (;) come separatore per i CSV e che la prima riga contenga le intestazioni.'], 400);
         }
 
         return response()->json([
@@ -643,8 +684,9 @@ session(['wa_id' => 1]);
     {
         $validated = $request->validate([
             'file_path' => 'required|string',
-            'map_name' => 'required|string',
             'map_phone' => 'required|string',
+            'map_vars' => 'present|array',
+            'map_vars.*' => 'nullable|string',
         ]);
 
         $filePath = storage_path('app/' . $validated['file_path']);
@@ -656,33 +698,37 @@ session(['wa_id' => 1]);
         $normalizedCount = 0;
         $validRecipients = [];
         $invalidEntries = [];
-
-        $handle = fopen($filePath, "r");
-        $headers = fgetcsv($handle, 0, ";");
-        $nameIndex = array_search($validated['map_name'], $headers);
-        $phoneIndex = array_search($validated['map_phone'], $headers);
-
-        if ($phoneIndex === false) {
-            fclose($handle);
-            return response()->json(['success' => false, 'message' => 'La colonna del telefono mappata non è stata trovata.'], 400);
+        
+        try {
+            $dataCollection = $this->getFileDataAsCollection($filePath);
+        } catch (\Exception $e) {
+            Log::error('Errore lettura file in ajaxValidate: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Errore durante la lettura del file. Assicurati che sia in un formato valido e non corrotto.'], 500);
         }
 
-        $lineNumber = 1;
-        while (($data = fgetcsv($handle, 0, ";")) !== FALSE) {
+        $mapPhone = $validated['map_phone'];
+        $mapVars = $validated['map_vars'];
+
+        $lineNumber = 1; // La collezione parte dalla prima riga di dati
+        foreach ($dataCollection as $row) {
             $lineNumber++;
             $totalRows++;
-            $phoneNumberRaw = isset($data[$phoneIndex]) ? trim($data[$phoneIndex]) : '';
-            $name = ($nameIndex !== false && isset($data[$nameIndex])) ? trim($data[$nameIndex]) : '';
+            $phoneNumberRaw = isset($row[$mapPhone]) ? trim($row[$mapPhone]) : '';
+            
+            $params = [];
+            foreach ($mapVars as $varName) {
+                $params[] = ($varName && isset($row[$varName])) ? trim($row[$varName]) : '';
+            }
+
             $validationResult = $this->normalizeAndValidatePhoneNumber($phoneNumberRaw);
 
             if ($validationResult['status'] === 'invalid') {
-                $invalidEntries[] = ['line' => $lineNumber, 'name' => $name, 'phone' => $phoneNumberRaw, 'reason' => $validationResult['reason']];
+                $invalidEntries[] = ['line' => $lineNumber, 'name' => $params[0] ?? '', 'phone' => $phoneNumberRaw, 'reason' => $validationResult['reason']];
             } else {
                 if ($validationResult['status'] === 'normalized') $normalizedCount++;
-                $validRecipients[] = ['name' => $name, 'phone_number' => $validationResult['number']];
+                $validRecipients[] = ['phone_number' => $validationResult['number'], 'params' => $params];
             }
         }
-        fclose($handle);
 
         $report = [
             'total_rows' => $totalRows,
@@ -739,8 +785,8 @@ session(['wa_id' => 1]);
                 $recipient = CampaignRecipient::create([
                     'campaign_id' => $campaign->id,
                     'phone_number' => $rec['phone_number'],
-                    'name' => $rec['name'],
-                    'params' => ['name' => $rec['name']],
+                    'name' => $rec['params'][0] ?? null,
+                    'params' => $rec['params'],
                     'status' => 'queued',
                 ]);
                 SendWhatsAppMessage::dispatch($recipient);
@@ -749,7 +795,7 @@ session(['wa_id' => 1]);
             $campaign->update(['status' => 'processing']);
             $request->session()->forget('validated_recipients');
 
-            return redirect()->route('campaigns.progress', $campaign->id);
+            return redirect()->route('campaigns.progress', ['campaign' => $campaign->id, 'token' => $request->session()->get('jwt_token')]);
         } else {
             // Logica per le altre fonti di destinatari (da implementare)
             return back()->with('error', 'La modalità di invio selezionata non è ancora stata implementata.')->withInput();
@@ -780,5 +826,57 @@ session(['wa_id' => 1]);
         }
 
         return back()->with('info', 'Questa campagna non è in esecuzione o è già stata completata/cancellata.');
+    }
+
+    /**
+     * Recupera i dettagli di un singolo template da Meta.
+     */
+    private function fetchTemplateDetails(WhatsappAccount $account, string $templateName): ?array
+    {
+        try {
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+            $url = "https://graph.facebook.com/{$apiVersion}/{$account->waba_id}/message_templates";
+            $response = Http::withToken($account->access_token)->get($url, ['name' => $templateName, 'fields' => 'components']);
+            $response->throw();
+            return $response->json('data')[0] ?? null;
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Legge i dati da un file (CSV o Excel) e li restituisce come array di array associativi.
+     */
+    private function getFileDataAsCollection(string $filePath): array
+    {
+        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+        $dataCollection = [];
+
+        if ($extension === 'csv') {
+            $handle = fopen($filePath, "r");
+            $csv_headers = fgetcsv($handle, 0, ";");
+            if ($csv_headers) {
+                while($row = fgetcsv($handle, 0, ";")) {
+                    // Ignora righe vuote
+                    if (empty(array_filter($row))) continue;
+                    // Assicura che il numero di colonne corrisponda
+                    if(count($csv_headers) == count($row)) {
+                        $dataCollection[] = array_combine($csv_headers, $row);
+                    }
+                }
+            }
+            fclose($handle);
+        } elseif (in_array($extension, ['xls', 'xlsx'])) {
+            $sheets = Excel::toArray(null, $filePath);
+            if (!empty($sheets) && !empty($sheets[0])) {
+                $sheetData = $sheets[0];
+                $headers = array_shift($sheetData); // Get and remove header row
+                foreach($sheetData as $row) {
+                    if (empty(array_filter($row))) continue; // Ignora righe vuote
+                    if (count($headers) == count($row)) $dataCollection[] = array_combine($headers, $row);
+                }
+            }
+        }
+        return $dataCollection;
     }
 }
