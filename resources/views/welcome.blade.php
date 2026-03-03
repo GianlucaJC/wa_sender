@@ -79,6 +79,22 @@
                         <input type="text" id="campaign_name" name="campaign_name" class="form-control form-control-lg" placeholder="Es: Promozione Estiva" value="{{ old('campaign_name', $campaignData['campaign_name'] ?? '') }}" @if(!$account) disabled @endif required>
                     </div>
 
+                    <!-- Selezione Template -->
+                    <div class="mb-4">
+                        <label for="message_template_name" class="form-label">Template Messaggio Approvato</label>
+                        <select id="message_template_name" name="message_template" class="form-select form-select-lg" required @if(!$account) disabled @endif>
+                            <option value="" selected>Scegli un template...</option>
+                            @forelse($templates as $template)
+                                <option value="{{ $template['name'] }}" @if(old('message_template', $campaignData['message_template'] ?? null) == $template['name']) selected @endif>{{ $template['name'] }}</option>
+                            @empty
+                                <option value="" disabled>Nessun template approvato trovato.</option>
+                            @endforelse
+                        </select>
+                        @if(isset($templates_error) && $templates_error)
+                            <div class="form-text text-danger mt-2">{{ $templates_error }}</div>
+                        @endif
+                    </div>
+
                     <!-- Tipologia di Invio -->
                     <div class="mb-4">
                         <label class="form-label fw-semibold">Modalità di Invio Destinatari</label>
@@ -114,33 +130,15 @@
                     <div id="file_upload_section" class="mb-4" style="display: none;">
                         <label for="recipient_file" class="form-label">Carica File Destinatari</label>
                         <input class="form-control form-control-lg" type="file" id="recipient_file" name="recipient_file" accept=".csv,.xls,.xlsx" @if(!$account) disabled @endif>
-                        <div class="form-text mt-2">
-                            Il file verrà caricato automaticamente. Sono ammessi solo file CSV con separatore punto e virgola (;).
-                        </div>
+                        <div class="form-text mt-2">Il file verrà caricato automaticamente. Sono ammessi solo file CSV con separatore punto e virgola (;) o file Excel (XLS, XLSX).</div>
                         <!-- Progress Bar -->
                         <div id="upload-progress-container" class="mt-3" style="display: none;">
                             <div class="progress" style="height: 20px;">
                                 <div id="upload-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
                             </div>
                         </div>
-                        <!-- Hidden input for file path -->
+                        <!-- Hidden input to store the server path of the uploaded file -->
                         <input type="hidden" id="recipient_file_path" name="recipient_file_path">
-                    </div>
-
-                    <!-- Selezione Template -->
-                    <div class="mb-4">
-                        <label for="message_template_name" class="form-label">Template Messaggio Approvato</label>
-                        <select id="message_template_name" name="message_template" class="form-select form-select-lg" required @if(!$account) disabled @endif>
-                            <option value="" selected>Scegli un template...</option>
-                            @forelse($templates as $template)
-                                <option value="{{ $template['name'] }}" @if(old('message_template', $campaignData['message_template'] ?? null) == $template['name']) selected @endif>{{ $template['name'] }}</option>
-                            @empty
-                                <option value="" disabled>Nessun template approvato trovato.</option>
-                            @endforelse
-                        </select>
-                        @if(isset($templates_error) && $templates_error)
-                            <div class="form-text text-danger mt-2">{{ $templates_error }}</div>
-                        @endif
                     </div>
 
                     <!-- Allegati -->
