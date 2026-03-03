@@ -1,10 +1,12 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    
+    # Imposta la base URL per le regole di riscrittura
     RewriteBase /wa_sender/
-
-    # Riscrive la richiesta per la root del progetto alla cartella /public
-    RewriteRule ^$ public/ [L]
-
-    # Riscrive tutte le altre richieste alla cartella /public
+    
+    # Non applicare le regole successive se la richiesta è già per la cartella /public
+    RewriteCond %{REQUEST_URI} !^/wa_sender/public/
+    
+    # Riscrive tutte le altre richieste per essere gestite dalla cartella /public
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
