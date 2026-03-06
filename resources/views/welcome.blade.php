@@ -431,7 +431,7 @@
                 testFeedback.className = 'form-text mt-2';
 
                 try {
-                    const response = await fetch('/campaigns/send-test', {
+                    const response = await fetch('{{ route("campaigns.sendTest") }}', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
