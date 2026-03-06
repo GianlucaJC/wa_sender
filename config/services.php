@@ -13,8 +13,8 @@ return [
     | a conventional file to locate the various service credentials.
     |
     */
-   'meta_whatsapp' => [
-        'token' => env('WHATSAPP_TOKEN'), // Token di sistema, usato per le API server-to-server (se necessario)
+    'meta_whatsapp' => [
+        'system_user_token' => env('META_SYSTEM_USER_TOKEN'), // Token del System User del Portfolio
         'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'), // ID numero di telefono di default (se necessario)
         'api_version' => 'v18.0', // Puoi aggiornare la versione API qui
         'client_id' => env('META_WHATSAPP_CLIENT_ID'), // ID dell'App Facebook (per l'SDK JS)

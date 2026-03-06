@@ -38,7 +38,8 @@ class CampaignController extends Controller
             // Il flusso procederà e userà i template di esempio più avanti.
             if ($account->name !== 'SIMULATE') {
                 try {
-                    $token = $account->access_token; // Questa riga può lanciare DecryptException
+                    // Con il modello Portfolio, il token è quello del System User, centralizzato.
+                    $token = config('services.meta_whatsapp.system_user_token');
                     $wabaId = $account->waba_id;
                     $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
@@ -50,9 +51,6 @@ class CampaignController extends Controller
                     ]);
                     $response->throw();
                     $templates = $response->json('data');
-                } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
-                    Log::critical("Errore di decrittazione del token per l'account '{$account->name}'. Verificare che l'APP_KEY sia corretta e che il token nel database sia valido.", ['exception' => $e]);
-                    $templates_error = 'Impossibile leggere le credenziali dell\'account. Il token salvato potrebbe essere corrotto o la chiave di cifratura (APP_KEY) è cambiata. Contattare l\'amministratore.';
                 } catch (Throwable $e) {
                     Log::error('Errore nel recuperare i template approvati da Meta: ' . $e->getMessage());
                     $templates_error = 'Impossibile recuperare i template approvati da Meta. Controlla i log o le credenziali dell\'account configurato.';
@@ -572,7 +570,8 @@ class CampaignController extends Controller
             }
             
             // Logica per l'invio reale
-            $token = $account->access_token; // Decifrato qui, solo per account reali
+            // Con il modello Portfolio, il token è quello del System User, centralizzato.
+            $token = config('services.meta_whatsapp.system_user_token');
             $phoneNumberId = $account->phone_number_id;
             $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
@@ -834,9 +833,10 @@ class CampaignController extends Controller
     private function fetchTemplateDetails(WhatsappAccount $account, string $templateName): ?array
     {
         try {
+            $token = config('services.meta_whatsapp.system_user_token');
             $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
             $url = "https://graph.facebook.com/{$apiVersion}/{$account->waba_id}/message_templates";
-            $response = Http::withToken($account->access_token)->get($url, ['name' => $templateName, 'fields' => 'components']);
+            $response = Http::withToken($token)->get($url, ['name' => $templateName, 'fields' => 'components']);
             $response->throw();
             return $response->json('data')[0] ?? null;
         } catch (Throwable $e) {

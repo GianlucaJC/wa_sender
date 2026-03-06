@@ -31,7 +31,8 @@ class TemplateController extends Controller
             $error = 'Nessun account WhatsApp collegato. Impossibile recuperare i template.';
         } elseif ($account->name !== 'SIMULATE') {
             try {
-                $token = $account->access_token; // Può lanciare DecryptException
+                // Con il modello Portfolio, il token è quello del System User, centralizzato.
+                $token = config('services.meta_whatsapp.system_user_token');
                 $url = "https://graph.facebook.com/{$apiVersion}/{$account->waba_id}/message_templates";
                 $response = Http::withToken($token)
                     ->get($url, ['fields' => 'name,status,category,language']);
@@ -39,11 +40,6 @@ class TemplateController extends Controller
                 $response->throw();
 
                 $templates = $response->json('data');
-                
-            } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
-                $errorMessage = "Impossibile leggere le credenziali per l'account '{$account->name}'.";
-                Log::critical($errorMessage . " Verificare che l'APP_KEY sia corretta e che il token nel database sia valido.", ['exception' => $e]);
-                $error = $errorMessage . ' Il token salvato potrebbe essere corrotto o la chiave di cifratura è cambiata.';
             } catch (Throwable $e) {
                 $errorMessage = "Impossibile recuperare i template per l'account '{$account->name}'.";
                 Log::error($errorMessage . ' Dettaglio: ' . $e->getMessage());
@@ -119,7 +115,8 @@ class TemplateController extends Controller
 
         try {
             $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
-            $token = $account->access_token;
+            // Con il modello Portfolio, il token è quello del System User, centralizzato.
+            $token = config('services.meta_whatsapp.system_user_token');
             $wabaId = $account->waba_id;
 
             if (!$token || !$wabaId) {
@@ -153,11 +150,6 @@ class TemplateController extends Controller
 
             Log::info('Template inviato con successo a Meta per approvazione:', $response->json());
             return redirect()->route('templates.index', ['token' => session('jwt_token')])->with('success', 'Template inviato con successo per l\'approvazione! Controlla lo stato nella dashboard di Meta.');
-        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
-            Log::critical("Errore di decrittazione del token per l'account '{$account->name}' durante la creazione del template.", ['exception' => $e]);
-            return redirect()->route('templates.create', ['token' => session('jwt_token')])
-                ->with('error', "Impossibile leggere le credenziali dell\'account. Il token salvato potrebbe essere corrotto o la chiave di cifratura è cambiata.")
-                ->withInput();
         } catch (Throwable $e) {
             Log::error('Eccezione durante l\'invio del template a Meta: ' . $e->getMessage());
             return redirect()->route('templates.create', ['token' => session('jwt_token')])->with('error', 'Si è verificato un errore imprevisto. Controlla i log.')->withInput();

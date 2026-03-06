@@ -99,11 +99,14 @@ class SendWhatsAppMessage implements ShouldQueue
 
             // Spostiamo il recupero delle credenziali e la costruzione dell'URL qui dentro
             // per intercettare eventuali errori di decrittazione.
-            $token = $account->access_token; // Decifrato qui
+            // Con il modello Portfolio, il token è quello del System User, centralizzato.
+            $token = config('services.meta_whatsapp.system_user_token');
+
+            // L'ID del numero di telefono, invece, è specifico dell'account selezionato.
             $phoneNumberId = $account->phone_number_id;
             $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
-            if (!$token || !$phoneNumberId) {
+            if (empty($token) || empty($phoneNumberId)) {
                 throw new \Exception('Credenziali dell\'account (token o ID telefono) mancanti.');
             }
 

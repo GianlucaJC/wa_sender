@@ -43,7 +43,7 @@ class WhatsappAccountController extends Controller
         $this->authorizeAdmin();
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'access_token' => 'required|string',
+            'access_token' => 'nullable|string', // Reso opzionale per il modello Portfolio
             'waba_id' => 'required|string|unique:whatsapp_accounts,waba_id',
             'phone_number_id' => 'required|string|unique:whatsapp_accounts,phone_number_id',
             'business_name' => 'required|string|max:255',
@@ -60,7 +60,10 @@ class WhatsappAccountController extends Controller
             $account->phone_number_display = $validated['phone_number_display'];
             $account->waba_id = $validated['waba_id'];
             $account->phone_number_id = $validated['phone_number_id'];
-            $account->access_token = $validated['access_token'];
+            // Il token non è più necessario con il modello Portfolio, ma lo salviamo se fornito.
+            if (!empty($validated['access_token'])) {
+                $account->access_token = $validated['access_token'];
+            }
             $account->save();
 
             return redirect()->route('whatsapp-accounts.index', ['token' => $request->session()->get('jwt_token')])
