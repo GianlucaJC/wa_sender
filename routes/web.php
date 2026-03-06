@@ -48,8 +48,6 @@ Route::middleware('jwt.verify')->group(function () {
     // Rotta per la documentazione
     Route::get('/docs', [CampaignController::class, 'showDocs'])->name('docs.index');
 
-    // Rotta per l'informativa sulla privacy
-    Route::get('/privacy-policy', [CampaignController::class, 'showPrivacyPolicy'])->name('privacy.policy');
 
     // Rotta per l'invio del messaggio di test (chiamata via Fetch API)
     Route::post('/campaigns/send-test', [CampaignController::class, 'sendTest'])->name('campaigns.sendTest');

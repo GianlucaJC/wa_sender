@@ -43,6 +43,16 @@
             <p class="lead">Configura i dettagli della tua campagna di messaggistica massiva.</p>
         </header>
 
+        {{-- Banner Amministratore --}}
+        @if ($isAdmin)
+            <div class="alert alert-secondary d-flex justify-content-between align-items-center mb-4" role="alert">
+                <span><i class="bi bi-person-badge"></i> <strong>Modalità Amministratore:</strong> Hai accesso a funzionalità aggiuntive.</span>
+                <a href="{{ route('whatsapp-accounts.index', ['token' => $token]) }}" class="btn btn-dark">
+                    <i class="bi bi-gear-fill"></i> Gestione Account WhatsApp
+                </a>
+            </div>
+        @endif
+
         <div class="text-center mb-4">
             <a href="{{ route('docs.index', ['token' => $token]) }}" class="btn btn-outline-white"><i class="bi bi-question-circle"></i> Guida Utente</a>
             <a href="{{ route('campaigns.index', ['token' => $token]) }}" class="btn btn-outline-white @if(!$account) disabled @endif" @if(!$account) aria-disabled="true" @endif><i class="bi bi-archive"></i> Storico Campagne</a>
@@ -54,16 +64,32 @@
                 <form id="campaignForm" action="{{ route('campaigns.launch.unified', ['token' => $token]) }}" method="POST">
                     @csrf
 
+                    @if(isset($templates_error) && $templates_error)
+                        <div class="alert alert-warning mb-4" role="alert">
+                            <h5 class="alert-heading"><i class="bi bi-exclamation-triangle-fill"></i> Attenzione!</h5>
+                            <p class="mb-0">{{ $templates_error }}</p>
+                        </div>
+                    @endif
+
                     {{-- Session and validation errors will be handled by Swal at the end of the body --}}
 
                     <!-- Account di Invio (sola lettura) -->
                     <div class="mb-4">
                         <label class="form-label">Account di Invio</label>
                         @if($account)
-                            <div class="card card-body bg-light">
-                                <p class="mb-0 fs-5">
-                                    <strong>{{ $account->name }}</strong> ({{ $account->phone_number_display }})
-                                </p>
+                            <div class="card card-body bg-light ">
+                                <div class="d-flex align-items-center">
+                                    @if($account->logo_path)
+                                        <img src="{{ asset('storage/' . $account->logo_path) }}" alt="Logo Account" title="Logo interno dell'account" class="me-3" style="height: 40px; width: 40px; object-fit: contain; border-radius: 50%;">
+                                    @else
+                                        <div class="me-3 text-secondary"><i class="bi bi-person-workspace" style="font-size: 35px;"></i></div>
+                                    @endif
+                                    <div>
+                                        <p class="mb-0 fs-5">
+                                            <strong>{{ $account->name }}</strong> ({{ $account->phone_number_display }})
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                         @else
                             <div class="alert alert-danger">
@@ -85,14 +111,14 @@
                         <select id="message_template_name" name="message_template" class="form-select form-select-lg" required @if(!$account) disabled @endif>
                             <option value="" selected>Scegli un template...</option>
                             @forelse($templates as $template)
-                                <option value="{{ $template['name'] }}" @if(old('message_template', $campaignData['message_template'] ?? null) == $template['name']) selected @endif>{{ $template['name'] }}</option>
+                                @php($compositeValue = $template['name'] . '|' . ($template['language'] ?? 'it'))
+                                <option value="{{ $compositeValue }}" @if(old('message_template', $campaignData['message_template'] ?? null) == $compositeValue) selected @endif>
+                                    {{ $template['name'] }} ({{ strtoupper($template['language'] ?? 'it') }})
+                                </option>
                             @empty
                                 <option value="" disabled>Nessun template approvato trovato.</option>
                             @endforelse
                         </select>
-                        @if(isset($templates_error) && $templates_error)
-                            <div class="form-text text-danger mt-2">{{ $templates_error }}</div>
-                        @endif
                     </div>
 
                     <!-- Tipologia di Invio -->
@@ -252,7 +278,7 @@
         </div>
 
         <footer class="mt-5 text-center">
-            WA Sender v1.0 | <a href="{{ route('privacy.policy', ['token' => $token]) }}" class="text-white" target="_blank">Informativa Privacy</a>
+            WA Sender v1.0 | <a href="privacy-policy.html" class="text-white" target="_blank">Informativa Privacy</a>
         </footer>
     </div>
 
@@ -334,14 +360,16 @@
             }
 
             templateSelect.addEventListener('change', (event) => {
-                const selectedTemplateName = event.target.value;
-                if (!selectedTemplateName) {
+                const selectedCompositeValue = event.target.value;
+                if (!selectedCompositeValue) {
                     previewBox.textContent = defaultPreviewText;
                     previewBox.className = 'text-body-secondary';
                     return;
                 }
 
-                const template = templatesData.find(t => t.name === selectedTemplateName);
+                const [selectedTemplateName, selectedLanguage] = selectedCompositeValue.split('|');
+
+                const template = templatesData.find(t => t.name === selectedTemplateName && t.language === selectedLanguage);
 
                 updateRequiredVars(template);
 
@@ -365,10 +393,10 @@
 
             sendTestBtn.addEventListener('click', async function() {
                 const recipient = testRecipientInput.value;
-                const templateName = templateSelect.value;
+                const templateCompositeValue = templateSelect.value;
 
                 // Validazione input
-                if (!recipient || !templateName ) {
+                if (!recipient || !templateCompositeValue ) {
                     return;
                 }
 
@@ -376,7 +404,8 @@
                 const selectedMethod = document.querySelector('input[name="test_send_method"]:checked').value;
 
                 if (selectedMethod === 'web') {
-                    const template = templatesData.find(t => t.name === templateName);
+                    const [name, lang] = templateCompositeValue.split('|');
+                    const template = templatesData.find(t => t.name === name && t.language === lang);
                     if (template) {
                         const bodyComponent = template.components.find(c => c.type === 'BODY');
                         if (bodyComponent) {
@@ -412,7 +441,7 @@
                         },
                         body: JSON.stringify({
                             recipient: recipient,
-                            message_template: templateName,
+                            message_template: templateCompositeValue,
                             variable_count: requiredVars,
                         })
                     });

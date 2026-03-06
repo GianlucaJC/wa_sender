@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
+use App\Http\Controllers\ManagesWhatsappAccount;
 
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Campaign;
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\Validator;
 
 class CampaignController extends Controller
 {
+    use ManagesWhatsappAccount;
+
     /**
      * Mostra il form per creare una nuova campagna.
      *
@@ -24,31 +27,36 @@ class CampaignController extends Controller
      */
     public function create()
     {
-        // Recupera l'ID dell'account dalla sessione. Se non c'è, usa l'account di simulazione come fallback.
-        $wa_id = session('wa_id');
-        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+        $account = $this->getCurrentAccount();
 
         $templates = [];
         $templates_error = null;
 
         // Se un account è configurato, proviamo a recuperare i suoi template.
         if ($account) {
-            $token = $account->access_token;
-            $wabaId = $account->waba_id;
-            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+            // Non tentare di recuperare template reali per l'account di simulazione.
+            // Il flusso procederà e userà i template di esempio più avanti.
+            if ($account->name !== 'SIMULATE') {
+                try {
+                    $token = $account->access_token; // Questa riga può lanciare DecryptException
+                    $wabaId = $account->waba_id;
+                    $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
-            try {
-                $url = "https://graph.facebook.com/{$apiVersion}/{$wabaId}/message_templates";
-                // Filtriamo per ottenere solo i template approvati, che sono gli unici utilizzabili
-                $response = Http::withToken($token)->get($url, [
-                    'fields' => 'name,status,components', // Chiediamo anche i components per future elaborazioni (variabili)
-                    'status' => 'APPROVED',
-                ]);
-                $response->throw();
-                $templates = $response->json('data');
-            } catch (Throwable $e) {
-                Log::error('Errore nel recuperare i template approvati da Meta: ' . $e->getMessage());
-                $templates_error = 'Impossibile recuperare i template approvati da Meta. Controlla i log o le credenziali dell\'account configurato.';
+                    $url = "https://graph.facebook.com/{$apiVersion}/{$wabaId}/message_templates";
+                    // Filtriamo per ottenere solo i template approvati, che sono gli unici utilizzabili
+                    $response = Http::withToken($token)->get($url, [
+                        'fields' => 'name,status,language,components', // Chiediamo anche i components e la lingua
+                        'status' => 'APPROVED',
+                    ]);
+                    $response->throw();
+                    $templates = $response->json('data');
+                } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+                    Log::critical("Errore di decrittazione del token per l'account '{$account->name}'. Verificare che l'APP_KEY sia corretta e che il token nel database sia valido.", ['exception' => $e]);
+                    $templates_error = 'Impossibile leggere le credenziali dell\'account. Il token salvato potrebbe essere corrotto o la chiave di cifratura (APP_KEY) è cambiata. Contattare l\'amministratore.';
+                } catch (Throwable $e) {
+                    Log::error('Errore nel recuperare i template approvati da Meta: ' . $e->getMessage());
+                    $templates_error = 'Impossibile recuperare i template approvati da Meta. Controlla i log o le credenziali dell\'account configurato.';
+                }
             }
         } else {
             // Non ci sono account configurati nel database.
@@ -83,12 +91,16 @@ class CampaignController extends Controller
         // quando si torna indietro dallo step 2.
         $campaignData = session()->get('campaign_creation_data');
 
+        // Controlla se l'utente ha i privilegi di amministratore
+        $isAdmin = session('user') === 'F0001';
+
         return view('welcome', [
             'account' => $account, // Passiamo il singolo account (o null)
             'templates' => $templates,
             'templates_error' => $templates_error,
             'campaignData' => $campaignData,
             'token' => session('jwt_token'),
+            'isAdmin' => $isAdmin,
         ]);
     }
 
@@ -199,8 +211,7 @@ class CampaignController extends Controller
         // Se è stato selezionato un template, ne analizziamo le variabili
         if (!empty($campaignData['message_template'])) {
             // Dobbiamo recuperare di nuovo la lista dei template per trovare quello selezionato
-            // Questa logica è duplicata da create(), potrebbe essere estratta in un metodo privato in futuro.
-            $account = $request->session()->get('wa_id') ? WhatsappAccount::find($request->session()->get('wa_id')) : WhatsappAccount::where('name', 'SIMULATE')->first();
+            $account = $this->getCurrentAccount();
             if ($account) {
                 $templateDetails = $this->fetchTemplateDetails($account, $campaignData['message_template']);
                 if ($templateDetails) {
@@ -384,7 +395,7 @@ class CampaignController extends Controller
             return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Sessione scaduta o nessun destinatario valido trovato. Riprova.');
         }
 
-        $account = WhatsappAccount::first();
+        $account = $this->getCurrentAccount();
         if (!$account) {
             return redirect()->route('campaigns.create', ['token' => $request->session()->get('jwt_token')])->with('error', 'Nessun account WhatsApp configurato. Impossibile avviare la campagna.');
         }
@@ -453,9 +464,7 @@ class CampaignController extends Controller
      */
     public function index()
     {
-        // Recupera l'account dell'utente corrente
-        $wa_id = session('wa_id');
-        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+        $account = $this->getCurrentAccount();
 
         // Mostra solo le campagne associate all'account dell'utente.
         // Se non c'è un account, la collezione sarà vuota.
@@ -481,14 +490,6 @@ class CampaignController extends Controller
     public function showDocs()
     {
         return view('docs.index', ['token' => session('jwt_token')]);
-    }
-
-    /**
-     * Mostra la pagina dell'informativa sulla privacy.
-     */
-    public function showPrivacyPolicy()
-    {
-        return view('privacy.index', ['token' => session('jwt_token')]);
     }
 
     /**
@@ -546,33 +547,39 @@ class CampaignController extends Controller
             'variable_count' => 'required|integer|min:0',
         ]);
 
-        try {
-            // Recupera l'ID dell'account dalla sessione. Se non c'è, usa l'account di simulazione come fallback.
-            $wa_id = session('wa_id');
-            $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+        // Il template viene passato come "nome|lingua"
+        $templateParts = explode('|', $validated['message_template']);
+        if (count($templateParts) !== 2) {
+            return response()->json(['message' => 'Formato del template non valido.'], 422);
+        }
+        $templateName = $templateParts[0];
+        $languageCode = $templateParts[1];
 
+        $account = $this->getCurrentAccount();
+
+        try {
             if (!$account) {
                 throw new \Exception('Nessun account WhatsApp è configurato nel sistema.');
             }
 
-            $token = $account->access_token; // L'attributo viene decifrato automaticamente
-            $phoneNumberId = $account->phone_number_id;
-            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
-
-            if (!$token || !$phoneNumberId) {
-                throw new \Exception('Credenziali non valide per l\'account selezionato.');
-            }
-
             // SIMULAZIONE: Se il nome dell'account è 'SIMULATE', non inviamo realmente.
             if ($account->name === 'SIMULATE') {
-                //sleep(rand(1, 2)); // Simula un ritardo di rete per un feedback più realistico.
                 Log::info('SIMULATED test send to: ' . $validated['recipient']);
                 return response()->json([
                     'message' => 'Messaggio di prova (simulato) inviato con successo.',
                     'message_id' => 'simulated_test_' . uniqid()
                 ]);
             }
+            
+            // Logica per l'invio reale
+            $token = $account->access_token; // Decifrato qui, solo per account reali
+            $phoneNumberId = $account->phone_number_id;
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
+            if (!$token || !$phoneNumberId) {
+                throw new \Exception('Credenziali non valide per l\'account selezionato.');
+            }
+            
             $url = "https://graph.facebook.com/{$apiVersion}/{$phoneNumberId}/messages";
 
             // Costruisce il payload per un messaggio template di test
@@ -580,23 +587,18 @@ class CampaignController extends Controller
                 'messaging_product' => 'whatsapp',
                 'to' => $validated['recipient'],
                 'type' => 'template',
-                'template' => [
-                    'name' => $validated['message_template'],
-                    'language' => ['code' => 'it'], // Assumiamo 'it', da rendere configurabile in futuro
-                ]
+                'template' => ['name' => $templateName, 'language' => ['code' => $languageCode]]
             ];
 
             $bodyParameters = [];
             for ($i = 1; $i <= $validated['variable_count']; $i++) {
                 $bodyParameters[] = ['type' => 'text', 'text' => "Test $i"];
             }
-
             if (!empty($bodyParameters)) {
                 $payload['template']['components'] = [['type' => 'body', 'parameters' => $bodyParameters]];
             }
 
             $response = Http::withToken($token)->post($url, $payload);
-
             if ($response->failed()) {
                 $errorData = $response->json();
                 $errorMessage = $errorData['error']['message'] ?? 'Unknown API error';
@@ -606,11 +608,12 @@ class CampaignController extends Controller
             $messageId = $response->json('messages')[0]['id'] ?? 'N/A';
             Log::info('Messaggio di test inviato a: ' . $validated['recipient'] . '. Message ID: ' . $messageId);
 
-            return response()->json([
-                'message' => 'Messaggio di prova inviato con successo.',
-                'message_id' => $messageId
-            ]);
+            return response()->json(['message' => 'Messaggio di prova inviato con successo.', 'message_id' => $messageId]);
 
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            $errorMessage = "Impossibile leggere le credenziali dell'account. Il token salvato potrebbe essere corrotto o la chiave di cifratura è cambiata.";
+            Log::critical("Errore di decrittazione del token durante l'invio di un test: " . $e->getMessage(), ['account_id' => $account->id ?? null]);
+            return response()->json(['message' => 'Impossibile inviare il messaggio di prova. Dettaglio: ' . $errorMessage], 500);
         } catch (\Exception $e) {
             Log::error('Errore durante l\'invio del messaggio di test: ' . $e->getMessage());
             return response()->json(['message' => 'Impossibile inviare il messaggio di prova. Dettaglio: ' . $e->getMessage()], 500);
@@ -751,9 +754,7 @@ class CampaignController extends Controller
      */
     public function launchUnified(Request $request)
     {
-        // Recupera l'ID dell'account dalla sessione. Se non c'è, usa l'account di simulazione come fallback.
-        $wa_id = session('wa_id');
-        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+        $account = $this->getCurrentAccount();
 
         if (!$account) {
             return back()->with('error', 'Nessun account WhatsApp configurato. Impossibile avviare la campagna.')->withInput();
@@ -811,8 +812,7 @@ class CampaignController extends Controller
     public function stop(Campaign $campaign)
     {
         // Recupera l'account dell'utente corrente per l'autorizzazione
-        $wa_id = session('wa_id');
-        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+        $account = $this->getCurrentAccount();
 
         // Verifica che l'utente sia autorizzato a modificare questa campagna
         if (!$account || $campaign->whatsapp_account_id !== $account->id) {

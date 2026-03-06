@@ -58,18 +58,6 @@ class SendWhatsAppMessage implements ShouldQueue
             return;
         }
 
-        $token = $account->access_token; // Decifrato automaticamente da Eloquent
-        $phoneNumberId = $account->phone_number_id;
-        $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
-
-        // SIMULAZIONE: Se il nome dell'account è 'SIMULATE', non inviamo realmente.
-        if ($account->name === 'SIMULATE') {
-            $this->simulateSend();
-            return;
-        }
-
-        $url = "https://graph.facebook.com/{$apiVersion}/{$phoneNumberId}/messages";
-
         // Costruzione del payload per un messaggio TEMPLATE
         // Grazie al cast 'array' nel modello CampaignRecipient, non è più necessario decodificare manualmente.
         // Laravel lo fa in automatico quando si accede all'attributo.
@@ -82,13 +70,18 @@ class SendWhatsAppMessage implements ShouldQueue
             ];
         }
 
+        // Il nome del template nella campagna potrebbe essere un valore composito "nome|lingua"
+        $templateParts = explode('|', $campaign->message_template);
+        $templateName = $templateParts[0];
+        $languageCode = $templateParts[1] ?? 'it'; // Fallback a 'it' per compatibilità
+
         $templatePayload = [
             'messaging_product' => 'whatsapp',
             'to' => $this->recipient->phone_number,
             'type' => 'template',
             'template' => [
-                'name' => $campaign->message_template,
-                'language' => ['code' => 'it'], // Assumiamo 'it', da rendere configurabile in futuro
+                'name' => $templateName,
+                'language' => ['code' => $languageCode],
             ]
         ];
 
@@ -98,6 +91,24 @@ class SendWhatsAppMessage implements ShouldQueue
         }
 
         try {
+            // SIMULAZIONE: Se il nome dell'account è 'SIMULATE', non inviamo realmente.
+            if ($account->name === 'SIMULATE') {
+                $this->simulateSend();
+                return;
+            }
+
+            // Spostiamo il recupero delle credenziali e la costruzione dell'URL qui dentro
+            // per intercettare eventuali errori di decrittazione.
+            $token = $account->access_token; // Decifrato qui
+            $phoneNumberId = $account->phone_number_id;
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+
+            if (!$token || !$phoneNumberId) {
+                throw new \Exception('Credenziali dell\'account (token o ID telefono) mancanti.');
+            }
+
+            $url = "https://graph.facebook.com/{$apiVersion}/{$phoneNumberId}/messages";
+
             $response = Http::withToken($token)->post($url, $templatePayload);
 
             if ($response->failed()) {
@@ -118,6 +129,9 @@ class SendWhatsAppMessage implements ShouldQueue
             ]);
             $campaign->increment('processed_count');
 
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            Log::critical("DECRYPTION FAILED in Job for account #{$account->id}. The queue worker might have a stale config/APP_KEY.", ['exception' => $e]);
+            $this->handleFailure('Errore di decrittazione del token. Riavviare il servizio di coda.', $e);
         } catch (Throwable $e) {
             Log::error("Exception caught while sending WhatsApp message to {$this->recipient->phone_number}: " . $e->getMessage());
             $this->handleFailure($e->getMessage(), $e);

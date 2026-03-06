@@ -25,6 +25,11 @@ class VerifyJwtToken
         // Il token può essere passato come parametro GET 'token' (es. /?token=...)
         $tokenString = $request->query('token');
 
+        // Aggiungiamo un controllo anche per 'token_api' per maggiore flessibilità
+        if (!$tokenString) {
+            $tokenString = $request->query('token_api');
+        }
+
         if (!$tokenString) {
             // O come header 'Authorization: Bearer <token>'
             $tokenString = $request->bearerToken();
@@ -65,9 +70,9 @@ class VerifyJwtToken
             // 3. Estrai i dati (claims) dal token
             $claims = $token->claims();
 
-            // Il gestionale deve passare 'wa_id' nel payload del token. 'is_admin' è opzionale.
+            // Il gestionale deve passare 'wa_id' e 'user' nel payload del token.
             $wa_id = $claims->get('wa_id');
-            $is_admin = $claims->get('is_admin', false); // Default a false se non presente
+            $user = $claims->get('user');
 
             if (!$wa_id) {
                 throw new \Exception('Il claim "wa_id" è obbligatorio e mancante nel token.');
@@ -76,7 +81,7 @@ class VerifyJwtToken
             // 4. Salva i dati in sessione per l'uso nei controller
             session([
                 'wa_id' => $wa_id,
-                'is_admin' => (bool) $is_admin,
+                'user' => $user,
                 'jwt_token' => $tokenString,
             ]);
 

@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
+use App\Http\Controllers\ManagesWhatsappAccount;
 
 use App\Models\WhatsappAccount;
 use Illuminate\Validation\Rule;
@@ -11,6 +12,8 @@ use Throwable;
 
 class TemplateController extends Controller
 {
+    use ManagesWhatsappAccount;
+
     /**
      * Mostra l'elenco dei template esistenti interrogando le API di Meta.
      *
@@ -18,9 +21,7 @@ class TemplateController extends Controller
      */
     public function index()
     {
-        // Recupera l'account dell'utente corrente
-        $wa_id = session('wa_id');
-        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+        $account = $this->getCurrentAccount();
 
         $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
         $templates = [];
@@ -28,21 +29,29 @@ class TemplateController extends Controller
 
         if (!$account) {
             $error = 'Nessun account WhatsApp collegato. Impossibile recuperare i template.';
-        } else {
+        } elseif ($account->name !== 'SIMULATE') {
             try {
+                $token = $account->access_token; // Può lanciare DecryptException
                 $url = "https://graph.facebook.com/{$apiVersion}/{$account->waba_id}/message_templates";
-                $response = Http::withToken($account->access_token)
+                $response = Http::withToken($token)
                     ->get($url, ['fields' => 'name,status,category,language']);
 
                 $response->throw();
 
                 $templates = $response->json('data');
                 
+            } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+                $errorMessage = "Impossibile leggere le credenziali per l'account '{$account->name}'.";
+                Log::critical($errorMessage . " Verificare che l'APP_KEY sia corretta e che il token nel database sia valido.", ['exception' => $e]);
+                $error = $errorMessage . ' Il token salvato potrebbe essere corrotto o la chiave di cifratura è cambiata.';
             } catch (Throwable $e) {
                 $errorMessage = "Impossibile recuperare i template per l'account '{$account->name}'.";
                 Log::error($errorMessage . ' Dettaglio: ' . $e->getMessage());
                 $error = $errorMessage;
             }
+        } else {
+            // Per l'account SIMULATE, non facciamo nulla. La vista mostrerà una lista vuota.
+            $error = "L'account di simulazione non ha template reali. La lista è vuota.";
         }
 
         return view('templates.index', [
@@ -59,9 +68,7 @@ class TemplateController extends Controller
      */
     public function create()
     {
-        // Recupera l'account dell'utente corrente
-        $wa_id = session('wa_id');
-        $account = $wa_id ? WhatsappAccount::find($wa_id) : WhatsappAccount::where('name', 'SIMULATE')->first();
+        $account = $this->getCurrentAccount();
 
         if (!$account) {
             return redirect()->route('campaigns.create', ['token' => session('jwt_token')])
@@ -97,35 +104,44 @@ class TemplateController extends Controller
             'language_code' => 'required|string|max:15',
             'body_text' => 'required|string',
         ], [
-            'whatsapp_account_id.in' => 'Non sei autorizzato a creare template per questo account.'
+            'whatsapp_account_id.in' => 'Non sei autorizzato a creare template per questo account.',
+            'name.regex' => 'Il nome del template può contenere solo lettere minuscole, numeri e underscore (es. mio_template_speciale).'
         ]);
 
         $account = WhatsappAccount::findOrFail($validated['whatsapp_account_id']);
-        $token = $account->access_token;
-        $wabaId = $account->waba_id;
-        $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
 
-        if (!$token || !$wabaId) {
-            return redirect()->route('templates.create', ['token' => session('jwt_token')])->with('error', 'Credenziali non valide per l\'account selezionato.')->withInput();
+        // Non è possibile creare template per l'account di simulazione, poiché richiede una chiamata API reale.
+        if ($account->name === 'SIMULATE') {
+            return redirect()->route('templates.create', ['token' => session('jwt_token')])
+                ->with('error', 'Non è possibile creare template per l\'account di simulazione.')
+                ->withInput();
         }
 
-        $url = "https://graph.facebook.com/{$apiVersion}/{$wabaId}/message_templates";
-
-        // Costruisce il payload secondo le specifiche di Meta
-        $payload = [
-            'name' => $validated['name'],
-            'language' => $validated['language_code'],
-            'category' => $validated['category'],
-            'components' => [
-                [
-                    'type' => 'BODY',
-                    'text' => $validated['body_text'],
-                ],
-                // Qui si potrebbero aggiungere HEADER, FOOTER, BUTTONS
-            ],
-        ];
-
         try {
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+            $token = $account->access_token;
+            $wabaId = $account->waba_id;
+
+            if (!$token || !$wabaId) {
+                return redirect()->route('templates.create', ['token' => session('jwt_token')])->with('error', 'Credenziali non valide per l\'account selezionato.')->withInput();
+            }
+
+            $url = "https://graph.facebook.com/{$apiVersion}/{$wabaId}/message_templates";
+
+            // Costruisce il payload secondo le specifiche di Meta
+            $payload = [
+                'name' => $validated['name'],
+                'language' => $validated['language_code'],
+                'category' => $validated['category'],
+                'components' => [
+                    [
+                        'type' => 'BODY',
+                        'text' => $validated['body_text'],
+                    ],
+                    // Qui si potrebbero aggiungere HEADER, FOOTER, BUTTONS
+                ],
+            ];
+
             $response = Http::withToken($token)->post($url, $payload);
 
             if ($response->failed()) {
@@ -137,7 +153,11 @@ class TemplateController extends Controller
 
             Log::info('Template inviato con successo a Meta per approvazione:', $response->json());
             return redirect()->route('templates.index', ['token' => session('jwt_token')])->with('success', 'Template inviato con successo per l\'approvazione! Controlla lo stato nella dashboard di Meta.');
-
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+            Log::critical("Errore di decrittazione del token per l'account '{$account->name}' durante la creazione del template.", ['exception' => $e]);
+            return redirect()->route('templates.create', ['token' => session('jwt_token')])
+                ->with('error', "Impossibile leggere le credenziali dell\'account. Il token salvato potrebbe essere corrotto o la chiave di cifratura è cambiata.")
+                ->withInput();
         } catch (Throwable $e) {
             Log::error('Eccezione durante l\'invio del template a Meta: ' . $e->getMessage());
             return redirect()->route('templates.create', ['token' => session('jwt_token')])->with('error', 'Si è verificato un errore imprevisto. Controlla i log.')->withInput();

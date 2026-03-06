@@ -14,9 +14,11 @@ return [
     |
     */
    'meta_whatsapp' => [
-        'token' => env('WHATSAPP_TOKEN'),
-        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'token' => env('WHATSAPP_TOKEN'), // Token di sistema, usato per le API server-to-server (se necessario)
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'), // ID numero di telefono di default (se necessario)
         'api_version' => 'v18.0', // Puoi aggiornare la versione API qui
+        'client_id' => env('META_WHATSAPP_CLIENT_ID'), // ID dell'App Facebook (per l'SDK JS)
+        'config_id' => env('META_WHATSAPP_CONFIG_ID'), // ID della configurazione "Embedded Signup"
     ],
     'mailgun' => [
         'domain' => env('MAILGUN_DOMAIN'),
