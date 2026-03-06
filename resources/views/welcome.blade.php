@@ -54,6 +54,7 @@
         @endif
 
         <div class="text-center mb-4">
+            <a href="{{ config('services.management_app.home_url', '#') }}" class="btn btn-outline-white"><i class="bi bi-house-door-fill"></i> Torna al Gestionale</a>
             <a href="{{ route('docs.index', ['token' => $token]) }}" class="btn btn-outline-white"><i class="bi bi-question-circle"></i> Guida Utente</a>
             <a href="{{ route('campaigns.index', ['token' => $token]) }}" class="btn btn-outline-white @if(!$account) disabled @endif" @if(!$account) aria-disabled="true" @endif><i class="bi bi-archive"></i> Storico Campagne</a>
             <a href="{{ route('templates.index', ['token' => $token]) }}" class="btn btn-outline-white @if(!$account) disabled @endif" @if(!$account) aria-disabled="true" @endif><i class="bi bi-card-list"></i> Gestisci Template</a>

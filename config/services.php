@@ -20,6 +20,9 @@ return [
         'client_id' => env('META_WHATSAPP_CLIENT_ID'), // ID dell'App Facebook (per l'SDK JS)
         'config_id' => env('META_WHATSAPP_CONFIG_ID'), // ID della configurazione "Embedded Signup"
     ],
+    'management_app' => [
+        'home_url' => env('MANAGEMENT_HOME_URL', '#'),
+    ],
     'mailgun' => [
         'domain' => env('MAILGUN_DOMAIN'),
         'secret' => env('MAILGUN_SECRET'),
