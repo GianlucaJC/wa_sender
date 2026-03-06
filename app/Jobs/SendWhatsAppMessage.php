@@ -119,7 +119,9 @@ class SendWhatsAppMessage implements ShouldQueue
                 return;
             }
 
-            $messageId = $response->json('messages')[0]['id'] ?? 'N/A';
+            // Utilizziamo data_get per recuperare in modo sicuro l'ID del messaggio.
+            // Questo previene errori se la struttura della risposta non è quella attesa.
+            $messageId = data_get($response->json(), 'messages.0.id', 'N/A');
             Log::info("WhatsApp message successfully queued for delivery to {$this->recipient->phone_number}. Message ID: {$messageId}");
 
             $this->recipient->update([
