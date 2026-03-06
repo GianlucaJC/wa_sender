@@ -53,7 +53,7 @@
                     
                     <form action="{{ route('campaigns.stop', ['campaign' => $campaign->id, 'token' => $token]) }}" method="POST" onsubmit="return confirm('Sei sicuro di voler interrompere questa campagna?');">
                         @csrf
-                        <button type="submit" class="btn btn-danger" id="stop-button" @if(!in_array($campaign->status, ['pending', 'processing'])) disabled @endif>
+                        <button type="submit" class="btn btn-danger" id="stop-button" {{ !in_array($campaign->status, ['pending', 'processing']) ? 'disabled' : '' }}>
                             <i class="bi bi-stop-circle"></i> Interrompi Campagna
                         </button>
                     </form>
@@ -63,7 +63,7 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // LA SOLUZIONE È QUI: Usiamo l'helper route() per generare l'URL completo e corretto.
             const statusUrl = "{{ route('campaigns.status', ['campaign' => $campaign->id, 'token' => $token]) }}";
             const jwtToken = document.querySelector('meta[name="jwt-token"]').getAttribute('content');
@@ -75,7 +75,7 @@
             const statusContainer = document.getElementById('status-container');
             const stopButton = document.getElementById('stop-button');
 
-            let intervalId = null;
+            let intervalId;
 
             function updateProgress(data) {
                 const total = data.total_recipients;
@@ -126,7 +126,7 @@
                 }
             }
 
-            updateProgress(@json($campaign->only(['id', 'status', 'total_recipients', 'processed_count', 'failed_count'])));
+            updateProgress({!! json_encode($campaign->only(['id', 'status', 'total_recipients', 'processed_count', 'failed_count'])) !!});
 
             if (['pending', 'processing'].includes('{{ $campaign->status }}')) {
                 intervalId = setInterval(fetchStatus, 3000);
@@ -135,3 +135,4 @@
     </script>
 </body>
 </html>
+
