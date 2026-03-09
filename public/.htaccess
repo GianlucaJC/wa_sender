@@ -5,6 +5,9 @@
 
     RewriteEngine On
 
+    # Imposta la base URL per le riscritture. Questa è la modifica chiave!
+    RewriteBase /wa_sender/
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
