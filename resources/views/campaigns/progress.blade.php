@@ -6,6 +6,7 @@
     <title>Avanzamento Campagna - FilleaOFFICE WhatsApp</title>
     <meta name="jwt-token" content="{{ $token }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         body { background-color: #f8f9fa; }
@@ -66,65 +67,30 @@
             <div class="card-header bg-white py-3">
                 <h5 class="mb-0">Dettaglio Destinatari</h5>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body p-4">
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover align-middle mb-0">
-                        <thead class="table-light">
+                    <table id="recipients-table" class="table table-striped table-bordered" style="width:100%">
+                        <thead>
                             <tr>
-                                <th style="width: 20%;">Nome</th>
-                                <th style="width: 20%;">Numero Telefono</th>
-                                <th class="text-center" style="width: 15%;">Stato Messaggio</th>
-                                <th style="width: 20%;">Ultimo Aggiornamento</th>
+                                <th>Nome</th>
+                                <th>Numero Telefono</th>
+                                <th class="text-center">Stato Messaggio</th>
+                                <th>Ultimo Aggiornamento</th>
                                 <th>Dettagli</th>
                             </tr>
                         </thead>
-                        <tbody id="recipients-table-body">
-                            @forelse($recipients as $recipient)
-                                @php
-                                    $status_info = match($recipient->status) {
-                                        'sent' => ['class' => 'bg-secondary', 'label' => 'Inviato', 'icon' => 'bi-check'],
-                                        'delivered' => ['class' => 'bg-info text-dark', 'label' => 'Consegnato', 'icon' => 'bi-check2-all'],
-                                        'read' => ['class' => 'bg-success', 'label' => 'Letto', 'icon' => 'bi-check2-all text-primary'],
-                                        'failed' => ['class' => 'bg-danger', 'label' => 'Fallito', 'icon' => 'bi-x-circle'],
-                                        'cancelled' => ['class' => 'bg-warning text-dark', 'label' => 'Annullato', 'icon' => 'bi-slash-circle'],
-                                        'processing' => ['class' => 'bg-light text-dark border', 'label' => 'In elaborazione', 'icon' => 'bi-arrow-repeat'],
-                                        'queued' => ['class' => 'bg-light text-dark border', 'label' => 'In coda', 'icon' => 'bi-clock-history'],
-                                        default => ['class' => 'bg-light text-dark border', 'label' => ucfirst($recipient->status), 'icon' => 'bi-question-circle'],
-                                    };
-                                @endphp
-                                <tr>
-                                    <td>{{ $recipient->name ?? 'N/D' }}</td>
-                                    <td>{{ $recipient->phone_number }}</td>
-                                    <td class="text-center">
-                                        <span class="badge {{ $status_info['class'] }}"><i class="bi {{ $status_info['icon'] }}"></i> {{ $status_info['label'] }}</span>
-                                    </td>
-                                    <td>{{ $recipient->updated_at->format('d/m/Y H:i:s') }}</td>
-                                    <td class="text-truncate" style="max-width: 200px;" title="{{ $recipient->status === 'failed' ? $recipient->error_message : $recipient->message_id }}">
-                                        @if($recipient->status === 'failed')
-                                            <span class="text-danger">{{ $recipient->error_message }}</span>
-                                        @else
-                                            <small class="text-muted">{{ $recipient->message_id }}</small>
-                                        @endif
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="5" class="text-center py-4 text-muted">Nessun destinatario da mostrare.</td>
-                                </tr>
-                            @endforelse
+                        <tbody>
+                            {{-- Il contenuto verrà caricato dinamicamente da DataTables --}}
                         </tbody>
                     </table>
                 </div>
             </div>
-            @if ($recipients->hasPages())
-                <div class="card-footer d-flex justify-content-center">
-                    {{-- Preserva i parametri della query string (come il token) durante la paginazione --}}
-                    {{ $recipients->appends(request()->query())->links('pagination::bootstrap-5') }}
-                </div>
-            @endif
         </div>
     </div>
 
+    <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             // LA SOLUZIONE È QUI: Usiamo l'helper route() per generare l'URL completo e corretto.
@@ -199,6 +165,69 @@
             if (['pending', 'processing'].includes('{{ $campaign->status }}')) {
                 intervalId = setInterval(fetchStatus, 3000);
             }
+
+            // Inizializzazione di DataTables
+            $('#recipients-table').DataTable({
+                processing: true,
+                serverSide: true,
+                ajax: "{{ route('campaigns.recipients.data', ['campaign' => $campaign->id, 'token' => $token]) }}",
+                columns: [
+                    { data: 'name', name: 'name', defaultContent: 'N/D' },
+                    { data: 'phone_number', name: 'phone_number' },
+                    { 
+                        data: 'status', 
+                        name: 'status',
+                        className: 'text-center',
+                        render: function(data, type, row) {
+                            let info = {};
+                            switch(data) {
+                                case 'sent': info = {class: 'bg-secondary', label: 'Inviato', icon: 'bi-check'}; break;
+                                case 'delivered': info = {class: 'bg-info text-dark', label: 'Consegnato', icon: 'bi-check2-all'}; break;
+                                case 'read': info = {class: 'bg-success', label: 'Letto', icon: 'bi-check2-all text-primary'}; break;
+                                case 'failed': info = {class: 'bg-danger', label: 'Fallito', icon: 'bi-x-circle'}; break;
+                                case 'cancelled': info = {class: 'bg-warning text-dark', label: 'Annullato', icon: 'bi-slash-circle'}; break;
+                                case 'processing': info = {class: 'bg-light text-dark border', label: 'In elaborazione', icon: 'bi-arrow-repeat'}; break;
+                                case 'queued': info = {class: 'bg-light text-dark border', label: 'In coda', icon: 'bi-clock-history'}; break;
+                                default: info = {class: 'bg-light text-dark border', label: (data || '').charAt(0).toUpperCase() + (data || '').slice(1), icon: 'bi-question-circle'}; break;
+                            }
+                            return `<span class="badge ${info.class}"><i class="bi ${info.icon}"></i> ${info.label}</span>`;
+                        }
+                    },
+                    { 
+                        data: 'updated_at', 
+                        name: 'processed_at', // Ordiniamo per 'processed_at' (come da controller) ma mostriamo 'updated_at'
+                        render: function(data, type, row) {
+                            if (!data) return '';
+                            const date = new Date(data);
+                            return date.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        }
+                    },
+                    {
+                        data: 'message_id',
+                        name: 'message_id',
+                        orderable: false, // Disabilitiamo l'ordinamento su questa colonna composita
+                        render: function(data, type, row) {
+                            const detail = row.status === 'failed' ? (row.error_message || 'Errore non specificato') : (row.message_id || 'N/A');
+                            const cssClass = row.status === 'failed' ? 'text-danger' : 'text-muted';
+                            const content = row.status === 'failed' ? detail : `<small>${detail}</small>`;
+                            return `<div class="${cssClass} text-truncate" style="display: inline-block; max-width: 200px;" title="${detail}">${content}</div>`;
+                        }
+                    }
+                ],
+                order: [[ 3, "desc" ]], // Ordina per data di aggiornamento (più recenti prima)
+                language: {
+                    "sEmptyTable": "Nessun dato presente nella tabella",
+                    "sInfo": "Vista da _START_ a _END_ di _TOTAL_ elementi",
+                    "sInfoEmpty": "Vista da 0 a 0 di 0 elementi",
+                    "sInfoFiltered": "(filtrati da _MAX_ elementi totali)",
+                    "sLengthMenu": "Visualizza _MENU_ elementi",
+                    "sLoadingRecords": "Caricamento...",
+                    "sProcessing": "Elaborazione...",
+                    "sSearch": "Cerca:",
+                    "sZeroRecords": "La ricerca non ha portato alcun risultato.",
+                    "oPaginate": { "sFirst": "Inizio", "sPrevious": "Precedente", "sNext": "Successivo", "sLast": "Fine" }
+                }
+            });
         });
     </script>
 </body>

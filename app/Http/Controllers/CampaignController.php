@@ -434,15 +434,10 @@ class CampaignController extends Controller
      */
     public function showProgress(Campaign $campaign)
     {
-        // Carica i destinatari della campagna in modo paginato per mostrarli nella vista.
-        // Usiamo un nome di pagina personalizzato per evitare conflitti.
-        $recipients = CampaignRecipient::where('campaign_id', $campaign->id)
-            ->orderBy('created_at', 'asc')
-            ->paginate(50, ['*'], 'recipientsPage');
-
+        // La vista ora caricherà i dati dei destinatari in modo asincrono tramite DataTables.
+        // Passiamo solo i dati della campagna.
         return view('campaigns.progress', [
             'campaign' => $campaign,
-            'recipients' => $recipients,
             'token' => session('jwt_token'),
         ]);
     }
@@ -460,6 +455,61 @@ class CampaignController extends Controller
         return response()->json($campaign->only([
             'id', 'status', 'total_recipients', 'processed_count', 'failed_count'
         ]));
+    }
+
+    /**
+     * Fornisce i dati dei destinatari per DataTables con paginazione, ricerca e ordinamento server-side.
+     */
+    public function getRecipientsData(Request $request, Campaign $campaign)
+    {
+        $query = CampaignRecipient::where('campaign_id', $campaign->id);
+
+        $totalRecords = $query->count(); // Totale record senza filtri
+
+        // Ricerca globale
+        if ($request->filled('search.value')) {
+            $searchValue = $request->input('search.value');
+            $query->where(function ($q) use ($searchValue) {
+                $q->where('name', 'like', "%{$searchValue}%")
+                  ->orWhere('phone_number', 'like', "%{$searchValue}%")
+                  ->orWhere('status', 'like', "%{$searchValue}%")
+                  ->orWhere('message_id', 'like', "%{$searchValue}%");
+            });
+        }
+
+        $filteredRecords = $query->count(); // Totale record dopo il filtro
+
+        // Ordinamento
+        if ($request->filled('order')) {
+            $order = $request->input('order')[0];
+            $columnIndex = $order['column'];
+            $columnName = $request->input('columns')[$columnIndex]['data'];
+            $direction = $order['dir'];
+
+            // Mappatura sicura per evitare SQL injection su nomi di colonna
+            $allowedColumns = ['id', 'name', 'phone_number', 'status', 'processed_at', 'message_id'];
+            if (in_array($columnName, $allowedColumns)) {
+                $query->orderBy($columnName, $direction);
+            } else {
+                $query->orderBy('created_at', 'asc'); // Fallback
+            }
+        } else {
+            $query->orderBy('created_at', 'asc');
+        }
+
+        // Paginazione
+        if ($request->filled('length') && $request->input('length') != -1) {
+            $query->skip($request->input('start'))->take($request->input('length'));
+        }
+
+        $recipients = $query->get();
+
+        return response()->json([
+            'draw' => intval($request->input('draw')),
+            'recordsTotal' => $totalRecords,
+            'recordsFiltered' => $filteredRecords,
+            'data' => $recipients
+        ]);
     }
 
     /**

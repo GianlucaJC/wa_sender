@@ -49,6 +49,8 @@ Route::middleware('jwt.verify')->group(function () {
     // Rotte per il monitoraggio della campagna
     Route::get('/campaigns/{campaign}/progress', [CampaignController::class, 'showProgress'])->name('campaigns.progress');
     Route::get('/campaigns/{campaign}/status', [CampaignController::class, 'getStatus'])->name('campaigns.status');
+    // Nuova rotta per fornire dati a DataTables per la pagina di progresso
+    Route::get('/campaigns/{campaign}/recipients-data', [CampaignController::class, 'getRecipientsData'])->name('campaigns.recipients.data');
 
     // Rotta per la documentazione
     Route::get('/docs', [CampaignController::class, 'showDocs'])->name('docs.index');
