@@ -39,6 +39,15 @@ class SendWhatsAppMessage implements ShouldQueue
         $campaign = $this->recipient->campaign;
         $account = $campaign->whatsappAccount;
 
+        // --- NUOVO CONTROLLO: Verifica se il destinatario è stato bloccato ---
+        if (\App\Models\BlockedRecipient::where('phone_number', $this->recipient->phone_number)->exists()) {
+            Log::info("Recipient {$this->recipient->phone_number} is blocked. Skipping message send for recipient #{$this->recipient->id}.");
+            $this->recipient->update(['status' => 'opted-out', 'processed_at' => now()]);
+            $campaign->increment('failed_count'); // Consideriamo l'opt-out come un "fallimento" per il conteggio
+            return; // Termina il job senza inviare il messaggio
+        }
+
+
         // Se la campagna è stata annullata, interrompiamo l'esecuzione.
         if ($campaign->status === 'cancelled') {
             $this->recipient->update(['status' => 'cancelled', 'processed_at' => now()]);

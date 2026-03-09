@@ -1130,11 +1130,13 @@ class CampaignController extends Controller
         if (empty($phoneNumber)) return;
 
         // Aggiunge o aggiorna il numero nella blocklist
-        \App\Models\BlockedRecipient::updateOrCreate(['phone_number' => $phoneNumber], ['reason' => $reason]);
+        $blocked = \App\Models\BlockedRecipient::updateOrCreate(['phone_number' => $phoneNumber], ['reason' => $reason]);
+        Log::info("Recipient {$phoneNumber} added/updated in blocklist. Reason: {$reason}. Blocked ID: {$blocked->id}");
 
         // Aggiorna lo stato di tutti i record esistenti per questo numero a 'opted-out'
-        CampaignRecipient::where('phone_number', $phoneNumber)->update(['status' => 'opted-out']);
+        $updatedCount = CampaignRecipient::where('phone_number', $phoneNumber)->update(['status' => 'opted-out']);
+        Log::info("Updated {$updatedCount} existing CampaignRecipient records to 'opted-out' for phone number {$phoneNumber}.");
 
-        Log::info("Recipient {$phoneNumber} has been blocked. Reason: {$reason}.");
+        Log::info("Recipient {$phoneNumber} has been fully processed for blocking. Reason: {$reason}.");
     }
 }
