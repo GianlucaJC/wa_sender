@@ -1039,18 +1039,60 @@ class CampaignController extends Controller
         $payload = $request->all();
         Log::info('Meta Webhook received and validated:', $payload);
 
-        $statuses = data_get($payload, 'entry.0.changes.0.value.statuses');
+        $changes = data_get($payload, 'entry.0.changes.0.value');
 
-        if (!$statuses) {
-            Log::info('Webhook received, but it is not a status update.');
+        if (!$changes) {
+            Log::info('Webhook received, but no changes found.');
             return response('EVENT_RECEIVED', 200);
         }
 
+        // --- Gestione messaggi in arrivo (es. "STOP") ---
+        $messages = data_get($changes, 'messages');
+        if ($messages) {
+            foreach ($messages as $message) {
+                // Controlla solo i messaggi di tipo 'text'
+                if (data_get($message, 'type') === 'text') {
+                    $text = strtolower(trim(data_get($message, 'text.body', '')));
+                    if ($text === 'stop') {
+                        $phoneNumber = data_get($message, 'from');
+                        $this->blockRecipient($phoneNumber, 'stop_reply');
+                    }
+                }
+            }
+        }
+
+        // --- Gestione stati e segnalazioni spam ---
+        $statuses = data_get($changes, 'statuses');
+        if ($statuses) {
+            $this->handleStatusUpdates($statuses);
+        }
+
+        return response('EVENT_RECEIVED', 200);
+    }
+
+    /**
+     * Gestisce gli aggiornamenti di stato dei messaggi e le segnalazioni di spam.
+     */
+    private function handleStatusUpdates(array $statuses): void
+    {
         foreach ($statuses as $statusData) {
             $messageId = data_get($statusData, 'id');
             $newStatus = data_get($statusData, 'status'); // es: 'sent', 'delivered', 'read'
 
-            if (!$messageId || !$newStatus) {
+            if (!$messageId) {
+                continue;
+            }
+
+            // --- NUOVA LOGICA: Controlla se è una segnalazione di spam ---
+            // Questo evento arriva come uno stato 'failed' con un codice di errore specifico.
+            $errors = data_get($statusData, 'errors');
+            if ($errors && data_get($errors, '0.code') === 131051) { // Codice errore per "Message reported as spam"
+                $phoneNumber = data_get($statusData, 'recipient_id');
+                $this->blockRecipient($phoneNumber, 'spam_report');
+                continue; // Passa al prossimo stato, non c'è altro da fare
+            }
+
+            if (!$newStatus) {
                 continue;
             }
 
@@ -1060,8 +1102,7 @@ class CampaignController extends Controller
                 // Definiamo un ordine per gli stati per evitare di sovrascrivere uno stato
                 // più avanzato con uno precedente (es. 'read' con 'delivered').
                 $statusOrder = [
-                    'queued' => 0, 'processing' => 1, 'sent' => 2,
-                    'delivered' => 3, 'read' => 4,
+                    'queued' => 0, 'processing' => 1, 'sent' => 2, 'delivered' => 3, 'read' => 4, 'opted-out' => 6,
                     'failed' => 5, 'cancelled' => 5
                 ];
 
@@ -1079,7 +1120,21 @@ class CampaignController extends Controller
                 Log::warning("Received webhook for unknown message_id: {$messageId}");
             }
         }
+    }
 
-        return response('EVENT_RECEIVED', 200);
+    /**
+     * Blocca un destinatario e aggiorna il suo stato in tutte le campagne.
+     */
+    private function blockRecipient(string $phoneNumber, string $reason): void
+    {
+        if (empty($phoneNumber)) return;
+
+        // Aggiunge o aggiorna il numero nella blocklist
+        \App\Models\BlockedRecipient::updateOrCreate(['phone_number' => $phoneNumber], ['reason' => $reason]);
+
+        // Aggiorna lo stato di tutti i record esistenti per questo numero a 'opted-out'
+        CampaignRecipient::where('phone_number', $phoneNumber)->update(['status' => 'opted-out']);
+
+        Log::info("Recipient {$phoneNumber} has been blocked. Reason: {$reason}.");
     }
 }
