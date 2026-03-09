@@ -214,6 +214,7 @@
                                 case 'failed': info = {class: 'bg-danger', label: 'Fallito', icon: 'bi-x-circle'}; break;
                                 case 'cancelled': info = {class: 'bg-warning text-dark', label: 'Annullato', icon: 'bi-slash-circle'}; break;
                                 case 'processing': info = {class: 'bg-light text-dark border', label: 'In elaborazione', icon: 'bi-arrow-repeat'}; break;
+                                case 'opted-out': info = {class: 'bg-dark', label: 'Bloccato', icon: 'bi-hand-thumbs-down-fill'}; break;
                                 case 'queued': info = {class: 'bg-light text-dark border', label: 'In coda', icon: 'bi-clock-history'}; break;
                                 default: info = {class: 'bg-light text-dark border', label: (data || '').charAt(0).toUpperCase() + (data || '').slice(1), icon: 'bi-question-circle'}; break;
                             }

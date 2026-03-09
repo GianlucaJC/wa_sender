@@ -824,6 +824,12 @@ class CampaignController extends Controller
 
             $validationResult = $this->normalizeAndValidatePhoneNumber($phoneNumberRaw);
 
+            // --- NUOVA LOGICA: Controlla se il numero è nella blocklist ---
+            if ($validationResult['status'] !== 'invalid' && \App\Models\BlockedRecipient::where('phone_number', $validationResult['number'])->exists()) {
+                $invalidEntries[] = ['line' => $lineNumber, 'name' => $params[0] ?? '', 'phone' => $phoneNumberRaw, 'reason' => 'Utente bloccato (opt-out)'];
+                continue; // Salta al prossimo destinatario
+            }
+
             if ($validationResult['status'] === 'invalid') {
                 $invalidEntries[] = ['line' => $lineNumber, 'name' => $params[0] ?? '', 'phone' => $phoneNumberRaw, 'reason' => $validationResult['reason']];
             } else {
