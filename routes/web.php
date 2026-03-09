@@ -15,6 +15,11 @@ use App\Http\Controllers\TemplateController;
 |
 */
 
+// --- Webhook per Meta WhatsApp ---
+// Queste rotte devono essere accessibili pubblicamente e non richiedono il token JWT.
+Route::get('/webhooks/meta', [CampaignController::class, 'verifyWebhook'])->name('meta.webhook.verify');
+Route::post('/webhooks/meta', [CampaignController::class, 'handleWebhook'])->name('meta.webhook.handle');
+
 Route::middleware('jwt.verify')->group(function () {
     // Rotta per mostrare il form di creazione campagna (associata al metodo create)
     Route::get('/', [CampaignController::class, 'create'])->name('campaigns.create');

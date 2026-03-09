@@ -434,8 +434,15 @@ class CampaignController extends Controller
      */
     public function showProgress(Campaign $campaign)
     {
+        // Carica i destinatari della campagna in modo paginato per mostrarli nella vista.
+        // Usiamo un nome di pagina personalizzato per evitare conflitti.
+        $recipients = CampaignRecipient::where('campaign_id', $campaign->id)
+            ->orderBy('created_at', 'asc')
+            ->paginate(50, ['*'], 'recipientsPage');
+
         return view('campaigns.progress', [
             'campaign' => $campaign,
+            'recipients' => $recipients,
             'token' => session('jwt_token'),
         ]);
     }
@@ -878,5 +885,102 @@ class CampaignController extends Controller
             }
         }
         return $dataCollection;
+    }
+
+    /**
+     * Gestisce la richiesta di verifica del webhook da parte di Meta.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function verifyWebhook(Request $request)
+    {
+        $verifyToken = config('services.meta_whatsapp.webhook_verify_token');
+
+        if (
+            $request->has('hub_mode') &&
+            $request->has('hub_challenge') &&
+            $request->has('hub_verify_token') &&
+            $request->input('hub_mode') === 'subscribe' &&
+            $request->input('hub_verify_token') === $verifyToken
+        ) {
+            Log::info('Webhook verification successful.');
+            return response($request->input('hub_challenge'), 200);
+        }
+
+        Log::warning('Webhook verification failed.', $request->all());
+        return response('Forbidden', 403);
+    }
+
+    /**
+     * Gestisce le notifiche di stato inviate dal webhook di Meta.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\Response
+     */
+    public function handleWebhook(Request $request)
+    {
+        // 1. Validazione della firma per sicurezza
+        $signature = $request->header('X-Hub-Signature-256');
+        $appSecret = config('services.meta_whatsapp.app_secret');
+
+        if (!$signature || !$appSecret) {
+            Log::warning('Webhook received without signature or app_secret not configured.');
+            return response('Forbidden', 403);
+        }
+
+        $expectedSignature = 'sha256=' . hash_hmac('sha256', $request->getContent(), $appSecret);
+
+        if (!hash_equals($expectedSignature, $signature)) {
+            Log::error('Webhook signature validation failed.');
+            return response('Forbidden', 403);
+        }
+
+        // 2. Processa il payload
+        $payload = $request->all();
+        Log::info('Meta Webhook received and validated:', $payload);
+
+        $statuses = data_get($payload, 'entry.0.changes.0.value.statuses');
+
+        if (!$statuses) {
+            Log::info('Webhook received, but it is not a status update.');
+            return response('EVENT_RECEIVED', 200);
+        }
+
+        foreach ($statuses as $statusData) {
+            $messageId = data_get($statusData, 'id');
+            $newStatus = data_get($statusData, 'status'); // es: 'sent', 'delivered', 'read'
+
+            if (!$messageId || !$newStatus) {
+                continue;
+            }
+
+            $recipient = CampaignRecipient::where('message_id', $messageId)->first();
+
+            if ($recipient) {
+                // Definiamo un ordine per gli stati per evitare di sovrascrivere uno stato
+                // più avanzato con uno precedente (es. 'read' con 'delivered').
+                $statusOrder = [
+                    'queued' => 0, 'processing' => 1, 'sent' => 2,
+                    'delivered' => 3, 'read' => 4,
+                    'failed' => 5, 'cancelled' => 5
+                ];
+
+                $currentStatusValue = $statusOrder[$recipient->status] ?? -1;
+                $newStatusValue = $statusOrder[$newStatus] ?? -1;
+
+                if ($newStatusValue > $currentStatusValue) {
+                    $recipient->status = $newStatus;
+                    $recipient->save(); // 'updated_at' verrà aggiornato automaticamente
+                    Log::info("Recipient #{$recipient->id} status updated to '{$newStatus}' for message_id {$messageId}.");
+                } else {
+                    Log::info("Skipping status update for Recipient #{$recipient->id} from '{$recipient->status}' to '{$newStatus}'.");
+                }
+            } else {
+                Log::warning("Received webhook for unknown message_id: {$messageId}");
+            }
+        }
+
+        return response('EVENT_RECEIVED', 200);
     }
 }

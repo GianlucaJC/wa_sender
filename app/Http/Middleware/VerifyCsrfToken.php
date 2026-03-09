@@ -12,6 +12,8 @@ class VerifyCsrfToken extends Middleware
      * @var array<int, string>
      */
     protected $except = [
-        //
+        // Escludiamo l'endpoint del webhook di Meta dalla protezione CSRF,
+        // poiché la sua sicurezza è gestita tramite firma digitale (X-Hub-Signature-256).
+        'webhooks/meta',
     ];
 }

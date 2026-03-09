@@ -50,15 +50,78 @@
 
                 <div class="d-flex justify-content-between mt-5">
                     <a href="{{ route('campaigns.index', ['token' => $token]) }}" class="btn btn-secondary"><i class="bi bi-archive"></i> Torna allo Storico</a>
-                    
-                    <form action="{{ route('campaigns.stop', ['campaign' => $campaign->id, 'token' => $token]) }}" method="POST" onsubmit="return confirm('Sei sicuro di voler interrompere questa campagna?');">
-                        @csrf
-                        <button type="submit" class="btn btn-danger" id="stop-button" {{ !in_array($campaign->status, ['pending', 'processing']) ? 'disabled' : '' }}>
-                            <i class="bi bi-stop-circle"></i> Interrompi Campagna
-                        </button>
-                    </form>
+
+                    @if(in_array($campaign->status, ['pending', 'processing']))
+                        <form action="{{ route('campaigns.stop', ['campaign' => $campaign->id, 'token' => $token]) }}" method="POST" onsubmit="return confirm('Sei sicuro di voler interrompere questa campagna?');" id="stop-campaign-form">
+                            @csrf
+                            <button type="submit" class="btn btn-danger" id="stop-button" {{ $campaign->status !== 'processing' ? 'disabled' : '' }}><i class="bi bi-stop-circle"></i> Interrompi Campagna</button>
+                        </form>
+                    @endif
                 </div>
             </div>
+        </div>
+
+        {{-- Sezione Dettaglio Destinatari --}}
+        <div class="card shadow-sm mt-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0">Dettaglio Destinatari</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 20%;">Nome</th>
+                                <th style="width: 20%;">Numero Telefono</th>
+                                <th class="text-center" style="width: 15%;">Stato Messaggio</th>
+                                <th style="width: 20%;">Ultimo Aggiornamento</th>
+                                <th>Dettagli</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recipients-table-body">
+                            @forelse($recipients as $recipient)
+                                @php
+                                    $status_info = match($recipient->status) {
+                                        'sent' => ['class' => 'bg-secondary', 'label' => 'Inviato', 'icon' => 'bi-check'],
+                                        'delivered' => ['class' => 'bg-info text-dark', 'label' => 'Consegnato', 'icon' => 'bi-check2-all'],
+                                        'read' => ['class' => 'bg-success', 'label' => 'Letto', 'icon' => 'bi-check2-all text-primary'],
+                                        'failed' => ['class' => 'bg-danger', 'label' => 'Fallito', 'icon' => 'bi-x-circle'],
+                                        'cancelled' => ['class' => 'bg-warning text-dark', 'label' => 'Annullato', 'icon' => 'bi-slash-circle'],
+                                        'processing' => ['class' => 'bg-light text-dark border', 'label' => 'In elaborazione', 'icon' => 'bi-arrow-repeat'],
+                                        'queued' => ['class' => 'bg-light text-dark border', 'label' => 'In coda', 'icon' => 'bi-clock-history'],
+                                        default => ['class' => 'bg-light text-dark border', 'label' => ucfirst($recipient->status), 'icon' => 'bi-question-circle'],
+                                    };
+                                @endphp
+                                <tr>
+                                    <td>{{ $recipient->name ?? 'N/D' }}</td>
+                                    <td>{{ $recipient->phone_number }}</td>
+                                    <td class="text-center">
+                                        <span class="badge {{ $status_info['class'] }}"><i class="bi {{ $status_info['icon'] }}"></i> {{ $status_info['label'] }}</span>
+                                    </td>
+                                    <td>{{ $recipient->updated_at->format('d/m/Y H:i:s') }}</td>
+                                    <td class="text-truncate" style="max-width: 200px;" title="{{ $recipient->status === 'failed' ? $recipient->error_message : $recipient->message_id }}">
+                                        @if($recipient->status === 'failed')
+                                            <span class="text-danger">{{ $recipient->error_message }}</span>
+                                        @else
+                                            <small class="text-muted">{{ $recipient->message_id }}</small>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-muted">Nessun destinatario da mostrare.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            @if ($recipients->hasPages())
+                <div class="card-footer d-flex justify-content-center">
+                    {{-- Preserva i parametri della query string (come il token) durante la paginazione --}}
+                    {{ $recipients->appends(request()->query())->links('pagination::bootstrap-5') }}
+                </div>
+            @endif
         </div>
     </div>
 
@@ -74,6 +137,7 @@
             const failedCountEl = document.getElementById('failed-count');
             const statusContainer = document.getElementById('status-container');
             const stopButton = document.getElementById('stop-button');
+            const stopForm = document.getElementById('stop-campaign-form');
 
             let intervalId;
 
@@ -96,12 +160,16 @@
                 if (data.status === 'completed' || data.status === 'cancelled' || data.status === 'failed') {
                     clearInterval(intervalId);
                     progressBar.classList.remove('progress-bar-animated');
-                    stopButton.disabled = true;
+                    if (stopForm) {
+                        stopForm.style.display = 'none';
+                    }
                     if (data.status === 'completed' && percentage === 100) {
                         progressBar.classList.add('bg-success');
                     } else {
                         progressBar.classList.add('bg-danger');
                     }
+                } else if (data.status === 'processing' && stopButton) {
+                    stopButton.disabled = false;
                 }
             }
 
@@ -135,4 +203,3 @@
     </script>
 </body>
 </html>
-
