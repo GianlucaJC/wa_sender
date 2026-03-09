@@ -3,22 +3,15 @@
         Options -MultiViews -Indexes
     </IfModule>
 
+
     RewriteEngine On
 
-    # Imposta la base URL per le riscritture. Questa è la modifica chiave!
-    RewriteBase /wa_sender/
-
-    # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
-
-    # Redirect Trailing Slashes If Not A Folder...
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteCond %{REQUEST_URI} (.+)/$
-    RewriteRule ^ %1 [L,R=301]
 
     # Handle Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteRule ^(.*)$ index.php?/$1 [L,QSA]
+    RewriteRule ^ index.php [L]
 </IfModule>
+
