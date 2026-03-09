@@ -1129,14 +1129,22 @@ class CampaignController extends Controller
     {
         if (empty($phoneNumber)) return;
 
-        // Aggiunge o aggiorna il numero nella blocklist
-        $blocked = \App\Models\BlockedRecipient::updateOrCreate(['phone_number' => $phoneNumber], ['reason' => $reason]);
-        Log::info("Recipient {$phoneNumber} added/updated in blocklist. Reason: {$reason}. Blocked ID: {$blocked->id}");
+        // --- Normalizza il numero di telefono in formato E.164 (+39...) ---
+        // I webhook di Meta per i messaggi in arrivo forniscono il numero senza il '+'.
+        // La nostra applicazione salva e confronta i numeri sempre in formato E.164 completo.
+        $normalizedPhoneNumber = $phoneNumber;
+        if (!str_starts_with($normalizedPhoneNumber, '+')) {
+            $normalizedPhoneNumber = '+' . $normalizedPhoneNumber;
+        }
+
+        // Aggiunge o aggiorna il numero nella blocklist usando il formato normalizzato
+        $blocked = \App\Models\BlockedRecipient::updateOrCreate(['phone_number' => $normalizedPhoneNumber], ['reason' => $reason]);
+        Log::info("Recipient {$normalizedPhoneNumber} added/updated in blocklist. Reason: {$reason}. Blocked ID: {$blocked->id}");
 
         // Aggiorna lo stato di tutti i record esistenti per questo numero a 'opted-out'
-        $updatedCount = CampaignRecipient::where('phone_number', $phoneNumber)->update(['status' => 'opted-out']);
-        Log::info("Updated {$updatedCount} existing CampaignRecipient records to 'opted-out' for phone number {$phoneNumber}.");
+        $updatedCount = CampaignRecipient::where('phone_number', $normalizedPhoneNumber)->update(['status' => 'opted-out']);
+        Log::info("Updated {$updatedCount} existing CampaignRecipient records to 'opted-out' for phone number {$normalizedPhoneNumber}.");
 
-        Log::info("Recipient {$phoneNumber} has been fully processed for blocking. Reason: {$reason}.");
+        Log::info("Recipient {$normalizedPhoneNumber} has been fully processed for blocking. Reason: {$reason}.");
     }
 }
