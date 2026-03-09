@@ -519,24 +519,67 @@ class CampaignController extends Controller
      */
     public function index()
     {
-        $account = $this->getCurrentAccount();
+        // La vista ora caricherà i dati delle campagne in modo asincrono tramite DataTables.
+        return view('campaigns.index', [
+            'token' => session('jwt_token'),
+        ]);
+    }
 
-        // Mostra solo le campagne associate all'account dell'utente.
-        // Se non c'è un account, la collezione sarà vuota.
-        $campaigns = Campaign::where('whatsapp_account_id', $account?->id)->latest()->paginate(15);
+    /**
+     * Fornisce i dati delle campagne per DataTables con paginazione, ricerca e ordinamento server-side.
+     */
+    public function getCampaignsData(Request $request)
+    {
+        $account = $this->getCurrentAccount();
+        $query = Campaign::where('whatsapp_account_id', $account?->id);
 
         // Controlla e aggiorna lo stato delle campagne "bloccate" in 'processing'
-        // prima di passarle alla vista.
-        foreach ($campaigns as $campaign) {
-            if ($campaign->status === 'processing' && ($campaign->processed_count + $campaign->failed_count) >= $campaign->total_recipients) {
+        // prima di servire i dati, per avere sempre lo stato più recente.
+        $processingCampaigns = (clone $query)->where('status', 'processing')->get();
+        foreach ($processingCampaigns as $campaign) {
+            if (($campaign->processed_count + $campaign->failed_count) >= $campaign->total_recipients) {
                 $campaign->update(['status' => 'completed']);
             }
         }
 
-        return view('campaigns.index', [
-            'campaigns' => $campaigns,
-            'token' => session('jwt_token'),
-        ]);
+        $totalRecords = (clone $query)->count();
+
+        // Ricerca globale
+        if ($request->filled('search.value')) {
+            $searchValue = $request->input('search.value');
+            $query->where(function ($q) use ($searchValue) {
+                $q->where('name', 'like', "%{$searchValue}%")
+                  ->orWhere('status', 'like', "%{$searchValue}%");
+            });
+        }
+
+        $filteredRecords = (clone $query)->count();
+
+        // Ordinamento
+        if ($request->filled('order')) {
+            $order = $request->input('order')[0];
+            $columnIndex = $order['column'];
+            $columnName = $request->input('columns')[$columnIndex]['data'];
+            $direction = $order['dir'];
+
+            $allowedColumns = ['name', 'status', 'total_recipients', 'created_at'];
+            if (in_array($columnName, $allowedColumns)) {
+                $query->orderBy($columnName, $direction);
+            } else {
+                $query->latest(); // Fallback
+            }
+        } else {
+            $query->latest(); // Default order
+        }
+
+        // Paginazione
+        if ($request->filled('length') && $request->input('length') != -1) {
+            $query->skip($request->input('start'))->take($request->input('length'));
+        }
+
+        $campaigns = $query->get();
+
+        return response()->json(['draw' => intval($request->input('draw')), 'recordsTotal' => $totalRecords, 'recordsFiltered' => $filteredRecords, 'data' => $campaigns]);
     }
 
     /**

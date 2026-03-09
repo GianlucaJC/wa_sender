@@ -26,6 +26,8 @@ Route::middleware('jwt.verify')->group(function () {
 
     // Rotta per visualizzare lo storico delle campagne
     Route::get('/campaigns', [CampaignController::class, 'index'])->name('campaigns.index');
+    // Nuova rotta per fornire dati a DataTables per lo storico campagne
+    Route::get('/campaigns-data', [CampaignController::class, 'getCampaignsData'])->name('campaigns.data');
 
     // Rotta per salvare i dati della campagna (associata al metodo store)
     Route::post('/campaigns', [CampaignController::class, 'store'])->name('campaigns.store');

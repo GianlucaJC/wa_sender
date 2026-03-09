@@ -7,10 +7,16 @@
     <meta name="jwt-token" content="{{ $token }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         body { background-color: #f8f9fa; }
         .progress { height: 2rem; font-size: 1rem; }
+        /* Sposta leggermente in basso i bottoni di DataTables per un migliore allineamento visivo con il selettore delle righe */
+        .dt-buttons {
+            position: relative;
+            top: 3px;
+        }
     </style>
 </head>
 <body>
@@ -91,6 +97,13 @@
     <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.53/vfs_fonts.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             // LA SOLUZIONE È QUI: Usiamo l'helper route() per generare l'URL completo e corretto.
@@ -171,6 +184,20 @@
                 processing: true,
                 serverSide: true,
                 ajax: "{{ route('campaigns.recipients.data', ['campaign' => $campaign->id, 'token' => $token]) }}",
+                dom: "<'row'<'col-sm-12 col-md-6'lB><'col-sm-12 col-md-6'f>>" + "<'row'<'col-sm-12'tr>>" + "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+                buttons: [
+                    {
+                        extend: 'excelHtml5',
+                        text: '<i class="bi bi-file-earmark-excel"></i> Esporta Excel',
+                        className: 'btn btn-success ms-2',
+                        titleAttr: 'Esporta in formato Excel',
+                        title: 'Dettaglio Destinatari - Campagna: {{ addslashes($campaign->name) }}',
+                        exportOptions: {
+                            // Esporta tutte le colonne visibili
+                            columns: [0, 1, 2, 3, 4]
+                        }
+                    }
+                ],
                 columns: [
                     { data: 'name', name: 'name', defaultContent: 'N/D' },
                     { data: 'phone_number', name: 'phone_number' },
