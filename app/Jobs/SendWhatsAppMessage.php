@@ -91,12 +91,46 @@ class SendWhatsAppMessage implements ShouldQueue
             'template' => [
                 'name' => $templateName,
                 'language' => ['code' => $languageCode],
+                'components' => [], // Inizializziamo l'array dei componenti
             ]
         ];
 
-        // Aggiungiamo i parametri solo se ce ne sono, come richiesto dall'API di Meta
+        // --- NUOVO: Gestione dell'header con allegato ---
+        // Se la campagna ha un media ID, costruiamo il componente 'header'.
+        // Questo richiede che il template su Meta sia stato creato con un header di tipo media (Immagine, Documento, Video).
+        if ($campaign->header_media_id && $campaign->header_media_type) {
+            $headerComponent = [
+                'type' => 'header',
+                'parameters' => [
+                    [
+                        // Il tipo qui è minuscolo: 'image', 'document', 'video'
+                        'type' => strtolower($campaign->header_media_type),
+                    ]
+                ]
+            ];
+
+            // Per i documenti, possiamo specificare un nome file.
+            if ($campaign->header_media_type === 'DOCUMENT') {
+                $headerComponent['parameters'][0]['document'] = [
+                    'id' => $campaign->header_media_id,
+                    'filename' => $campaign->header_media_name, // Opzionale, ma consigliato
+                ];
+            } else { // Per IMAGE, VIDEO, etc.
+                $headerComponent['parameters'][0][strtolower($campaign->header_media_type)] = [
+                    'id' => $campaign->header_media_id,
+                ];
+            }
+            $templatePayload['template']['components'][] = $headerComponent;
+        }
+
+        // Aggiungiamo i parametri del body solo se ce ne sono
         if (!empty($bodyParameters)) {
-            $templatePayload['template']['components'] = [['type' => 'body', 'parameters' => $bodyParameters]];
+            $templatePayload['template']['components'][] = ['type' => 'body', 'parameters' => $bodyParameters];
+        }
+
+        // Se non ci sono componenti (né header con media, né body con variabili), rimuoviamo la chiave.
+        if (empty($templatePayload['template']['components'])) {
+            unset($templatePayload['template']['components']);
         }
 
         try {

@@ -934,6 +934,59 @@ class CampaignController extends Controller
     }
 
     /**
+     * Determina il tipo di media per l'API di WhatsApp in base al MIME type.
+     */
+    private function getMediaType(string $mimeType): ?string
+    {
+        if ($mimeType === 'application/pdf') {
+            return 'DOCUMENT';
+        }
+        if (in_array($mimeType, ['image/jpeg', 'image/png'])) {
+            return 'IMAGE';
+        }
+        // In futuro si potrebbero aggiungere 'VIDEO' e 'AUDIO'
+        return null;
+    }
+
+    /**
+     * Carica un file multimediale sui server di WhatsApp e restituisce il media ID.
+     */
+    private function uploadMediaToWhatsapp(WhatsappAccount $account, \Illuminate\Http\UploadedFile $file): ?string
+    {
+        if ($account->name === 'SIMULATE') {
+            return 'simulated_media_id_' . uniqid();
+        }
+
+        try {
+            $token = config('services.meta_whatsapp.system_user_token');
+            $phoneNumberId = $account->phone_number_id;
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+            $url = "https://graph.facebook.com/{$apiVersion}/{$phoneNumberId}/media";
+
+            $response = Http::withToken($token)
+                ->attach('file', $file->get(), $file->getClientOriginalName())
+                ->post($url, [
+                    'messaging_product' => 'whatsapp',
+                ]);
+
+            $response->throw(); // Lancia un'eccezione se la risposta è un errore (4xx o 5xx)
+
+            $mediaId = $response->json('id');
+            if ($mediaId) {
+                Log::info("File media '{$file->getClientOriginalName()}' caricato con successo per l'account #{$account->id}. Media ID: {$mediaId}");
+                return $mediaId;
+            }
+
+            Log::error("Impossibile ottenere il media ID dalla risposta dell'API di WhatsApp.", ['response' => $response->json()]);
+            return null;
+
+        } catch (Throwable $e) {
+            Log::error("Eccezione durante il caricamento del media su WhatsApp per l'account #{$account->id}: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Recupera i dettagli di un singolo template da Meta.
      */
     private function fetchTemplateDetails(WhatsappAccount $account, string $templateName): ?array

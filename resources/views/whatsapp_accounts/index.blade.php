@@ -36,20 +36,23 @@
         <table class="table table-striped table-hover align-middle">
             <thead class="table-light">
                 <tr>
-                    <th>Nome Account</th>
-                    <th>Nome Azienda (Meta)</th>
+                    <th style="width: 20%;">Nome Account</th>
                     <th>Numero di Telefono</th>
-                    <th>Data Collegamento</th>
-                    <th>Azioni</th>
+                    <th>WABA ID</th>
+                    <th>Phone Number ID</th>
+                    <th style="width: 10%;">Azioni</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach($accounts as $account)
                     <tr>
-                        <td>{{ $account->name }}</td>
-                        <td>{{ $account->business_name }}</td>
+                        <td>
+                            <strong>{{ $account->name }}</strong>
+                            <small class="d-block text-muted">{{ $account->business_name }}</small>
+                        </td>
                         <td>{{ $account->phone_number_display }}</td>
-                        <td>{{ $account->created_at->format('d/m/Y H:i') }}</td>
+                        <td><code>{{ $account->waba_id }}</code></td>
+                        <td><code>{{ $account->phone_number_id }}</code></td>
                         <td>
                             {{-- L'account di simulazione non può essere modificato o rimosso --}}
                             @if ($account->name !== 'SIMULATE')

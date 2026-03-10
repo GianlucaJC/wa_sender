@@ -62,7 +62,7 @@
 
         <main class="card shadow-sm">
             <div class="card-body p-4 p-md-5">
-                <form id="campaignForm" action="{{ route('campaigns.launch.unified', ['token' => $token]) }}" method="POST">
+                <form id="campaignForm" action="{{ route('campaigns.launch.unified', ['token' => $token]) }}" method="POST" enctype="multipart/form-data">
                     @csrf
 
                     @if(isset($templates_error) && $templates_error)
@@ -112,9 +112,20 @@
                         <select id="message_template_name" name="message_template" class="form-select form-select-lg" required @if(!$account) disabled @endif>
                             <option value="" selected>Scegli un template...</option>
                             @forelse($templates as $template)
-                                @php($compositeValue = $template['name'] . '|' . ($template['language'] ?? 'it'))
+                                @php
+                                    $compositeValue = $template['name'] . '|' . ($template['language'] ?? 'it');
+                                    $headerComponent = collect($template['components'])->firstWhere('type', 'HEADER');
+                                    $mediaIcon = null;
+                                    if ($headerComponent && isset($headerComponent['format'])) {
+                                        if ($headerComponent['format'] === 'DOCUMENT') $mediaIcon = '📄';
+                                        elseif ($headerComponent['format'] === 'IMAGE') $mediaIcon = '🖼️';
+                                        elseif ($headerComponent['format'] === 'VIDEO') $mediaIcon = '🎬';
+                                    }
+                                @endphp
                                 <option value="{{ $compositeValue }}" @if(old('message_template', $campaignData['message_template'] ?? null) == $compositeValue) selected @endif>
+                                    @if($mediaIcon) {{ $mediaIcon }} @endif
                                     {{ $template['name'] }} ({{ strtoupper($template['language'] ?? 'it') }})
+                                    @if($mediaIcon) <span class="text-muted">- con allegato</span> @endif
                                 </option>
                             @empty
                                 <option value="" disabled>Nessun template approvato trovato.</option>
@@ -168,20 +179,13 @@
                         <input type="hidden" id="recipient_file_path" name="recipient_file_path">
                     </div>
 
-                    <!-- Allegati -->
-                    <div class="mb-4" style='display:none'>
-                        <label for="attachment_link" class="form-label">Link da allegare (opzionale)</label>
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
-                            <input type="url" id="attachment_link" name="attachment_link" class="form-control form-control-lg" placeholder="https://esempio.com/documento" value="{{ old('attachment_link', $campaignData['attachment_link'] ?? '') }}" @if(!$account) disabled @endif>
-                        </div>
-                        <div class="form-text mt-2">Il link verrà usato se il template lo prevede (es. in un pulsante o come variabile).</div>
-                    </div>
-
-                    <div class="mb-4" style='display:none'>
-                        <label for="attachment_pdf" class="form-label">PDF da allegare (opzionale)</label>
-                        <input class="form-control form-control-lg" type="file" id="attachment_pdf" name="attachment_pdf" accept="application/pdf" @if(!$account) disabled @endif>
-                        <div class="form-text mt-2">Il PDF verrà inviato come documento se il template selezionato ha un header di tipo "Documento".</div>
+                    <!-- Allegato Header -->
+                    <div class="mb-4" id="header_attachment_container" style="display: none;">
+                        <label for="header_attachment" class="form-label">
+                            Allegato Intestazione <span class="text-danger">*</span>
+                        </label>
+                        <input class="form-control form-control-lg" type="file" id="header_attachment" name="header_attachment" @if(!$account) disabled @endif>
+                        <div class="form-text mt-2" id="header_attachment_help">Il template selezionato richiede un allegato.</div>
                     </div>
 
                     <!-- Anteprima -->
@@ -293,6 +297,8 @@
             const popoverList = [...popoverTriggerList].map(popoverTriggerEl => new bootstrap.Popover(popoverTriggerEl));
             const templateSelect = document.getElementById('message_template_name');
             const previewBox = document.getElementById('message_preview');
+            const headerAttachmentContainer = document.getElementById('header_attachment_container');
+            const headerAttachmentInput = document.getElementById('header_attachment');
             const defaultPreviewText = previewBox.textContent;
             const templatesData = @json($templates);
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -340,9 +346,6 @@
                 radio.addEventListener('change', toggleFileUploadSection);
             });
             toggleFileUploadSection(); // Esegui al caricamento per impostare lo stato iniziale
-            // Trigger change on template select to show preview for the pre-selected item
-            if (templateSelect.value) templateSelect.dispatchEvent(new Event('change'));
-
 
             function updateRequiredVars(template) {
                 requiredVars = 0; // Reset
@@ -360,32 +363,49 @@
                 }
             }
 
-            templateSelect.addEventListener('change', (event) => {
-                const selectedCompositeValue = event.target.value;
+            function handleTemplateChange() {
+                const selectedCompositeValue = templateSelect.value;
+
+                // Reset preview and attachment field
+                previewBox.textContent = defaultPreviewText;
+                previewBox.className = 'text-body-secondary';
+                headerAttachmentContainer.style.display = 'none';
+                headerAttachmentInput.value = '';
+                headerAttachmentInput.required = false;
+
                 if (!selectedCompositeValue) {
-                    previewBox.textContent = defaultPreviewText;
-                    previewBox.className = 'text-body-secondary';
                     return;
                 }
 
                 const [selectedTemplateName, selectedLanguage] = selectedCompositeValue.split('|');
-
-                const template = templatesData.find(t => t.name === selectedTemplateName && t.language === selectedLanguage);
+                const template = templatesData.find(t => t.name === selectedTemplateName && (t.language || 'it') === selectedLanguage);
 
                 updateRequiredVars(template);
 
                 if (template) {
+                    // Update preview
                     const bodyComponent = template.components.find(c => c.type === 'BODY');
-                    if (bodyComponent) {
+                    if (bodyComponent && bodyComponent.text) {
                         previewBox.className = 'text-body';
                         let previewText = bodyComponent.text.replace(/\{\{(\d+)\}\}/g, `<strong class="text-primary">[Variabile $1]</strong>`);
                         previewBox.innerHTML = previewText;
                     }
-                } else {
-                     previewBox.textContent = defaultPreviewText;
-                     previewBox.className = 'text-body-secondary';
+
+                    // Check for media header and show/hide attachment field
+                    const headerComponent = template.components.find(c => c.type === 'HEADER');
+                    const hasMediaHeader = headerComponent && ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(headerComponent.format);
+
+                    if (hasMediaHeader) {
+                        headerAttachmentContainer.style.display = 'block';
+                        headerAttachmentInput.required = true;
+                        document.getElementById('header_attachment_help').textContent = `Il template richiede un allegato di tipo ${headerComponent.format}.`;
+                        headerAttachmentInput.accept = headerComponent.format === 'DOCUMENT' ? '.pdf' : '.jpg,.jpeg,.png';
+                    }
                 }
-            });
+            }
+
+            templateSelect.addEventListener('change', handleTemplateChange);
+            handleTemplateChange(); // Esegui al caricamento per impostare lo stato iniziale
 
             // --- Logica per Invio Test ---
             const sendTestBtn = document.getElementById('send_test_button');
