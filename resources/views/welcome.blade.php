@@ -315,6 +315,7 @@
             const validationModal = new bootstrap.Modal(validationModalEl);
             const mainLaunchButton = document.getElementById('main-launch-button');
             const jwtToken = document.querySelector('meta[name="jwt-token"]').getAttribute('content');
+            let requiredHeaderFormat = null;
             let requiredVars = 0;
 
             // Helper to show alerts using SweetAlert2
@@ -370,6 +371,7 @@
                 previewBox.textContent = defaultPreviewText;
                 previewBox.className = 'text-body-secondary';
                 headerAttachmentContainer.style.display = 'none';
+                requiredHeaderFormat = null;
                 headerAttachmentInput.value = '';
                 headerAttachmentInput.required = false;
 
@@ -397,6 +399,7 @@
 
                     if (hasMediaHeader) {
                         headerAttachmentContainer.style.display = 'block';
+                        requiredHeaderFormat = headerComponent.format;
                         headerAttachmentInput.required = true;
                         document.getElementById('header_attachment_help').textContent = `Il template richiede un allegato di tipo ${headerComponent.format}.`;
                         headerAttachmentInput.accept = headerComponent.format === 'DOCUMENT' ? '.pdf' : '.jpg,.jpeg,.png';
@@ -452,20 +455,36 @@
                 testFeedback.className = 'form-text mt-2';
 
                 try {
-                    const response = await fetch('{{ route("campaigns.sendTest") }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken,
-                            'Accept': 'application/json',
-                            'Authorization': `Bearer ${jwtToken}`,
-                        },
-                        body: JSON.stringify({
+                    let requestBody;
+                    let requestHeaders = {
+                        'X-CSRF-TOKEN': csrfToken,
+                        'Accept': 'application/json',
+                        'Authorization': `Bearer ${jwtToken}`,
+                    };
+                    const testAttachmentFile = headerAttachmentInput.files[0];
+
+                    // Se è stato selezionato un file per l'allegato di test, usiamo FormData.
+                    // Altrimenti, usiamo JSON come prima (per test senza allegato o con allegato di default).
+                    if (requiredHeaderFormat && testAttachmentFile) {
+                        const formData = new FormData();
+                        formData.append('recipient', recipient);
+                        formData.append('message_template', templateCompositeValue);
+                        formData.append('variable_count', requiredVars);
+                        formData.append('header_format', requiredHeaderFormat);
+                        formData.append('header_attachment', testAttachmentFile);
+                        requestBody = formData;
+                        // Non impostare 'Content-Type', il browser lo farà per FormData.
+                    } else {
+                        requestHeaders['Content-Type'] = 'application/json';
+                        requestBody = JSON.stringify({
                             recipient: recipient,
                             message_template: templateCompositeValue,
                             variable_count: requiredVars,
-                        })
-                    });
+                            header_format: requiredHeaderFormat // Inviato anche se non c'è file, per usare il dummy link
+                        });
+                    }
+
+                    const response = await fetch('{{ route("campaigns.sendTest") }}', { method: 'POST', headers: requestHeaders, body: requestBody });
 
                     const result = await response.json();
 

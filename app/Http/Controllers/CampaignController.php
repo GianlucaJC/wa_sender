@@ -639,10 +639,13 @@ class CampaignController extends Controller
     public function sendTest(Request $request)
     {
         $validated = $request->validate([
-            // 'whatsapp_account_id' => 'required|exists:whatsapp_accounts,id', // Rimosso, si usa l'account di default
             'recipient' => 'required|string|min:10', // Aggiunta una validazione base
             'message_template' => 'required|string',
             'variable_count' => 'required|integer|min:0',
+            'header_format' => 'nullable|string|in:IMAGE,DOCUMENT,VIDEO',
+            // Aggiungiamo la validazione per il file di test, se presente.
+            // I tipi di file sono indicativi, Meta ha le sue restrizioni.
+            'header_attachment' => 'nullable|file|max:5120', // Max 5MB
         ]);
 
         // Il template viene passato come "nome|lingua"
@@ -686,15 +689,73 @@ class CampaignController extends Controller
                 'messaging_product' => 'whatsapp',
                 'to' => $validated['recipient'],
                 'type' => 'template',
-                'template' => ['name' => $templateName, 'language' => ['code' => $languageCode]]
+                'template' => [
+                    'name' => $templateName,
+                    'language' => ['code' => $languageCode],
+                    'components' => [], // Inizializza l'array dei componenti
+                ]
             ];
 
+            $headerComponent = null;
+
+            // Priorità 1: Se è stato caricato un file specifico per il test, usiamo quello.
+            if ($request->hasFile('header_attachment')) {
+                $file = $request->file('header_attachment');
+                $mediaId = $this->uploadMediaToWhatsapp($account, $file);
+
+                if (!$mediaId) {
+                    throw new \Exception("Impossibile caricare il file di test su WhatsApp.");
+                }
+
+                $mediaType = strtolower($validated['header_format']); // 'document', 'image', etc.
+                $parameter = ['type' => $mediaType];
+
+                if ($mediaType === 'document') {
+                    $parameter['document'] = ['id' => $mediaId, 'filename' => $file->getClientOriginalName()];
+                } elseif ($mediaType === 'image') {
+                    $parameter['image'] = ['id' => $mediaId];
+                } // Aggiungere 'video' se necessario
+
+                if (isset($parameter[$mediaType])) {
+                    $headerComponent = ['type' => 'header', 'parameters' => [$parameter]];
+                }
+
+            // Priorità 2: Se non c'è file ma il template richiede un header, usiamo un link di esempio.
+            } elseif (!empty($validated['header_format'])) {
+                $mediaType = strtolower($validated['header_format']);
+                $parameter = ['type' => $mediaType];
+
+                if ($mediaType === 'document') {
+                    $parameter['document'] = [
+                        'link' => 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+                        'filename' => 'documento_di_test.pdf'
+                    ];
+                } elseif ($mediaType === 'image') {
+                    $parameter['image'] = ['link' => 'https://www.filleacgil.it/images/loghi/fillea-logo-colori.png'];
+                }
+
+                if (isset($parameter[$mediaType])) {
+                    $headerComponent = ['type' => 'header', 'parameters' => [$parameter]];
+                }
+            }
+
+            // Aggiunge il componente header al payload, se è stato creato.
+            if ($headerComponent) {
+                $payload['template']['components'][] = $headerComponent;
+            }
+
+            // Aggiunge le variabili del body, se presenti
             $bodyParameters = [];
             for ($i = 1; $i <= $validated['variable_count']; $i++) {
                 $bodyParameters[] = ['type' => 'text', 'text' => "Test $i"];
             }
             if (!empty($bodyParameters)) {
-                $payload['template']['components'] = [['type' => 'body', 'parameters' => $bodyParameters]];
+                $payload['template']['components'][] = ['type' => 'body', 'parameters' => $bodyParameters];
+            }
+
+            // Se non ci sono componenti, rimuove la chiave per evitare di inviare un array vuoto.
+            if (empty($payload['template']['components'])) {
+                unset($payload['template']['components']);
             }
 
             $response = Http::withToken($token)->post($url, $payload);
