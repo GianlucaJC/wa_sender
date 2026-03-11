@@ -99,28 +99,36 @@ class SendWhatsAppMessage implements ShouldQueue
         // Se la campagna ha un media ID, costruiamo il componente 'header'.
         // Questo richiede che il template su Meta sia stato creato con un header di tipo media (Immagine, Documento, Video).
         if ($campaign->header_media_id && $campaign->header_media_type) {
-            $headerComponent = [
-                'type' => 'header',
-                'parameters' => [
-                    [
-                        // Il tipo qui è minuscolo: 'image', 'document', 'video'
-                        'type' => strtolower($campaign->header_media_type),
-                    ]
-                ]
-            ];
+            // Riscriviamo la logica per essere più robusta e meno soggetta a errori sottili.
+            // Invece di costruire l'oggetto 'parameter' dinamicamente, lo creiamo staticamente
+            // per ogni tipo di media, garantendo che la struttura sia sempre corretta.
+            $mediaTypeClean = strtolower(trim($campaign->header_media_type));
+            $headerComponent = null;
 
-            // Per i documenti, possiamo specificare un nome file.
-            if ($campaign->header_media_type === 'DOCUMENT') {
-                $headerComponent['parameters'][0]['document'] = [
-                    'id' => $campaign->header_media_id,
-                    'filename' => $campaign->header_media_name, // Opzionale, ma consigliato
+            if ($mediaTypeClean === 'document') {
+                $documentPayload = ['id' => $campaign->header_media_id];
+                if (!empty($campaign->header_media_name)) {
+                    $documentPayload['filename'] = $campaign->header_media_name;
+                }
+                $headerComponent = [
+                    'type' => 'header',
+                    'parameters' => [['type' => 'document', 'document' => $documentPayload]]
                 ];
-            } else { // Per IMAGE, VIDEO, etc.
-                $headerComponent['parameters'][0][strtolower($campaign->header_media_type)] = [
-                    'id' => $campaign->header_media_id,
+            } elseif ($mediaTypeClean === 'image') {
+                $headerComponent = [
+                    'type' => 'header',
+                    'parameters' => [['type' => 'image', 'image' => ['id' => $campaign->header_media_id]]]
+                ];
+            } elseif ($mediaTypeClean === 'video') {
+                $headerComponent = [
+                    'type' => 'header',
+                    'parameters' => [['type' => 'video', 'video' => ['id' => $campaign->header_media_id]]]
                 ];
             }
-            $templatePayload['template']['components'][] = $headerComponent;
+
+            if ($headerComponent) {
+                $templatePayload['template']['components'][] = $headerComponent;
+            }
         }
 
         // Aggiungiamo i parametri del body solo se ce ne sono

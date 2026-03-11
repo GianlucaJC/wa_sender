@@ -64,6 +64,8 @@
             <div class="card-body p-4 p-md-5">
                 <form id="campaignForm" action="{{ route('campaigns.launch.unified', ['token' => $token]) }}" method="POST" enctype="multipart/form-data">
                     @csrf
+                    <!-- Hidden input to carry over the required header format to the backend -->
+                    <input type="hidden" name="header_format" id="header_format_input">
 
                     @if(isset($templates_error) && $templates_error)
                         <div class="alert alert-warning mb-4" role="alert">
@@ -314,6 +316,7 @@
             const validationModalEl = document.getElementById('validationReportModal');
             const validationModal = new bootstrap.Modal(validationModalEl);
             const mainLaunchButton = document.getElementById('main-launch-button');
+            const headerFormatInput = document.getElementById('header_format_input');
             const jwtToken = document.querySelector('meta[name="jwt-token"]').getAttribute('content');
             let requiredHeaderFormat = null;
             let requiredVars = 0;
@@ -371,10 +374,11 @@
                 previewBox.textContent = defaultPreviewText;
                 previewBox.className = 'text-body-secondary';
                 headerAttachmentContainer.style.display = 'none';
+                headerFormatInput.value = '';
                 requiredHeaderFormat = null;
                 headerAttachmentInput.value = '';
                 headerAttachmentInput.required = false;
-
+                headerAttachmentInput.accept = ''; // FIX: Resetta il tipo di file accettato a ogni cambio.
                 if (!selectedCompositeValue) {
                     return;
                 }
@@ -395,14 +399,18 @@
 
                     // Check for media header and show/hide attachment field
                     const headerComponent = template.components.find(c => c.type === 'HEADER');
-                    const hasMediaHeader = headerComponent && ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(headerComponent.format);
+                    // Aggiungiamo un trim() per robustezza, nel caso l'API restituisca valori con spazi (es. "DOCUMENT ").
+                    const format = headerComponent && headerComponent.format ? headerComponent.format.trim() : null;
+                    const hasMediaHeader = format && ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(format);
 
                     if (hasMediaHeader) {
                         headerAttachmentContainer.style.display = 'block';
-                        requiredHeaderFormat = headerComponent.format;
+                        // Usiamo il valore "pulito" per evitare errori
+                        headerFormatInput.value = format;
+                        requiredHeaderFormat = format;
                         headerAttachmentInput.required = true;
-                        document.getElementById('header_attachment_help').textContent = `Il template richiede un allegato di tipo ${headerComponent.format}.`;
-                        headerAttachmentInput.accept = headerComponent.format === 'DOCUMENT' ? '.pdf' : '.jpg,.jpeg,.png';
+                        document.getElementById('header_attachment_help').textContent = `Il template richiede un allegato di tipo ${format}.`;
+                        headerAttachmentInput.accept = format === 'DOCUMENT' ? '.pdf' : '.jpg,.jpeg,.png';
                     }
                 }
             }

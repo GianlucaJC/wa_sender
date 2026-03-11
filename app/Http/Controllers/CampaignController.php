@@ -663,17 +663,6 @@ class CampaignController extends Controller
                 throw new \Exception('Nessun account WhatsApp è configurato nel sistema.');
             }
 
-            // SIMULAZIONE: Se il nome dell'account è 'SIMULATE', non inviamo realmente.
-            if ($account->name === 'SIMULATE') {
-                Log::info('SIMULATED test send to: ' . $validated['recipient']);
-                return response()->json([
-                    'message' => 'Messaggio di prova (simulato) inviato con successo.',
-                    'message_id' => 'simulated_test_' . uniqid()
-                ]);
-            }
-            
-            // Logica per l'invio reale
-            // Con il modello Portfolio, il token è quello del System User, centralizzato.
             $token = config('services.meta_whatsapp.system_user_token');
             $phoneNumberId = $account->phone_number_id;
             $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
@@ -758,6 +747,17 @@ class CampaignController extends Controller
                 unset($payload['template']['components']);
             }
 
+            // SIMULAZIONE: Se l'account è 'SIMULATE', non inviamo realmente ma logghiamo il payload.
+            // La funzione di upload media gestisce già la sua parte di simulazione restituendo un ID fittizio.
+            if ($account->name === 'SIMULATE') {
+                Log::info('SIMULATED test send to: ' . $validated['recipient'], ['payload' => $payload]);
+                return response()->json([
+                    'message' => 'Messaggio di prova (simulato) inviato con successo. Controlla i log per il payload.',
+                    'message_id' => 'simulated_test_' . uniqid()
+                ]);
+            }
+
+            // Invio reale
             $response = Http::withToken($token)->post($url, $payload);
             if ($response->failed()) {
                 $errorData = $response->json();
@@ -931,7 +931,39 @@ class CampaignController extends Controller
             'campaign_name' => 'required|string|max:255',
             'message_template' => 'required|string',
             'recipient_source' => 'required|in:fillea_tabulato,assemblea_generale,organismi_dirigenti,file_upload',
+            'header_attachment' => 'nullable|file|max:5120',
+            // Il tipo di header viene ora passato direttamente dal form, rendendo il processo più robusto.
+            'header_format' => 'nullable|string|in:DOCUMENT,IMAGE,VIDEO',
         ]);
+
+        // --- GESTIONE ALLEGATO CAMPAGNA ---
+        $mediaId = null;
+        $mediaType = null;
+        $mediaName = null;
+
+        // 1. Usa direttamente il formato dell'header passato dal form, eliminando la necessità di una seconda chiamata API.
+        $requiredHeaderFormat = $validated['header_format'] ?? null;
+
+        // 2. Se il template richiede un allegato, il file è obbligatorio (validazione server-side).
+        if ($requiredHeaderFormat && !$request->hasFile('header_attachment')) {
+            $templateNameOnly = explode('|', $validated['message_template'])[0];
+            return back()->with('error', "Il template '{$templateNameOnly}' richiede un allegato di tipo {$requiredHeaderFormat}, ma non è stato fornito alcun file.")->withInput();
+        }
+
+        // 3. Se un file è stato caricato (e richiesto), lo carichiamo su Meta.
+        if ($requiredHeaderFormat && $request->hasFile('header_attachment')) {
+            $file = $request->file('header_attachment');
+            $uploadedMediaId = $this->uploadMediaToWhatsapp($account, $file);
+
+            if (!$uploadedMediaId) {
+                return back()->with('error', 'Impossibile caricare l\'allegato su WhatsApp. La campagna non è stata avviata.')->withInput();
+            }
+            // Solo se l'upload ha successo, impostiamo tutti i campi del media.
+            $mediaId   = $uploadedMediaId;
+            $mediaType = $requiredHeaderFormat;
+            $mediaName = $file->getClientOriginalName();
+        }
+        // --- FINE GESTIONE ALLEGATO ---
 
         if ($validated['recipient_source'] === 'file_upload') {
             $validatedRecipients = $request->session()->get('validated_recipients');
@@ -940,12 +972,22 @@ class CampaignController extends Controller
                 return back()->with('error', 'Nessun destinatario valido trovato. Esegui nuovamente il processo di caricamento e validazione del file.')->withInput();
             }
 
+            // --- DEBUG: Stampa i dati prima dell'inserimento nel DB ---
+            // Decommenta la riga `dd(...)` qui sotto per bloccare l'esecuzione e
+            // vedere l'array esatto che sta per essere salvato.
+            // Controlla 'header_format' nei dati validati e 'type' nei dati media.
+            // Se sono 'null', hai la conferma che il dato non arriva correttamente dal form.
+          
             $campaign = Campaign::create([
                 'whatsapp_account_id' => $account->id,
                 'name' => $validated['campaign_name'],
                 'message_template' => $validated['message_template'],
                 'status' => 'pending',
                 'total_recipients' => count($validatedRecipients),
+                // Aggiungiamo i dati del media alla campagna
+                'header_media_id' => $mediaId,
+                'header_media_type' => $mediaType,
+                'header_media_name' => $mediaName,
             ]);
 
             foreach ($validatedRecipients as $rec) {
@@ -1053,6 +1095,11 @@ class CampaignController extends Controller
     private function fetchTemplateDetails(WhatsappAccount $account, string $templateName): ?array
     {
         try {
+            // Non fare chiamate API per l'account di simulazione, che non ha template reali.
+            if ($account->name === 'SIMULATE') {
+                return null;
+            }
+
             $token = config('services.meta_whatsapp.system_user_token');
             $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
             $url = "https://graph.facebook.com/{$apiVersion}/{$account->waba_id}/message_templates";
@@ -1060,6 +1107,7 @@ class CampaignController extends Controller
             $response->throw();
             return $response->json('data')[0] ?? null;
         } catch (Throwable $e) {
+            Log::error("Impossibile recuperare i dettagli del template '{$templateName}' per l'account #{$account->id}: " . $e->getMessage());
             return null;
         }
     }
