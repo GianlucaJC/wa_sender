@@ -4,90 +4,112 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Informativa Privacy - FilleaOFFICE WhatsApp</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Open Graph Meta Tags per Facebook/Meta -->
+    <meta property="og:title" content="Informativa Privacy - FilleaOFFICE WhatsApp" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.filleaoffice.it/privacy-policy.html" />
+    <meta property="og:image" content="https://www.filleaoffice.it/logo.png" />
+    <meta property="og:image:alt" content="Logo Fillea CGIL" />
+    <meta property="og:description" content="La presente Informativa sulla Privacy descrive come le tue informazioni personali vengono raccolte, utilizzate e condivise quando utilizzi il nostro servizio di invio campagne WhatsApp (il 'Servizio'), integrato con le API di Meta Platforms, Inc." />
+    <meta property="fb:app_id" content="1261212119438653" />
+
     <style>
-        body { background-color: #f8f9fa; }
-        .container { max-width: 800px; }
-        h1, h2 { color: #8d0c10; }
-        .card { border: none; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #212529;
+            background-color: #f8f9fa;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        h1, h2 {
+            color: #8d0c10; /* Colore istituzionale Fillea */
+        }
+        .container {
+            background: #fff;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.07);
+        }
+        ul {
+            padding-left: 20px;
+        }
+        strong {
+            color: #343a40;
+        }
     </style>
 </head>
 <body>
-    <div class="container my-4 my-md-5">
-        <div class="card shadow-sm">
-            <div class="card-body p-4 p-md-5">
-                <h1 class="display-6 fw-bold mb-4">Informativa sulla Privacy</h1>
-                <p class="text-muted">Ultimo aggiornamento: 26 Febbraio 2026</p>
+    <div class="container">
+        <h1>Informativa sulla Privacy per il Servizio di Invio Campagne WhatsApp</h1>
+        <p><strong>Ultimo aggiornamento: 2 Marzo 2026</strong></p>
 
-                <p>La presente Informativa sulla Privacy descrive come le tue informazioni personali vengono raccolte, utilizzate e condivise quando utilizzi il nostro servizio di invio campagne WhatsApp (il "Servizio").</p>
+        <p>
+            La presente Informativa sulla Privacy descrive come le tue informazioni personali vengono raccolte, utilizzate e condivise quando utilizzi il nostro servizio di invio campagne WhatsApp (il "Servizio"), integrato con le API di Meta Platforms, Inc.
+        </p>
 
-                <h2 class="h4 mt-5 mb-3">1. Titolare del Trattamento dei Dati</h2>
-                <p>
-                    Il Titolare del Trattamento dei Dati è <strong>[NOME DELLA TUA AZIENDA/ORGANIZZAZIONE]</strong>, con sede in <strong>[Il tuo indirizzo]</strong>.
-                    <br>
-                    Email di contatto del Titolare: <strong>[La tua email di contatto per la privacy]</strong>
-                </p>
+        <h2>1. Titolare del Trattamento dei Dati</h2>
+        <p>
+            Il Titolare del Trattamento dei Dati è <strong>Fillea CGIL Nazionale</strong>, con sede in Via G.B. Morgagni 27, 00161 ROMA.
+            <br>
+            Email di contatto del Titolare: <strong>segreteria@filleacgil.it</strong>
+        </p>
 
-                <h2 class="h4 mt-5 mb-3">2. Dati Personali Raccolti</h2>
-                <p>Raccogliamo le seguenti categorie di dati personali per fornire e migliorare il Servizio:</p>
-                <ul>
-                    <li>
-                        <strong>Dati di Connessione all'Account WhatsApp:</strong> Quando colleghi il tuo account WhatsApp Business tramite il processo di "Embedded Signup" di Facebook, riceviamo da Meta Platforms, Inc. le seguenti informazioni necessarie per operare:
-                        <ul>
-                            <li>Il tuo nome account (da te fornito sulla nostra piattaforma).</li>
-                            <li>Il nome della tua azienda (fornito da Meta).</li>
-                            <li>L'ID del tuo WhatsApp Business Account (WABA ID).</li>
-                            <li>L'ID del tuo numero di telefono collegato.</li>
-                            <li>Il numero di telefono in formato visualizzabile.</li>
-                            <li>Un token di accesso con scadenza, necessario per autorizzare le chiamate API per tuo conto.</li>
-                        </ul>
-                    </li>
-                    <li>
-                        <strong>Dati delle Campagne:</strong> Quando crei una campagna, raccogliamo:
-                        <ul>
-                            <li>Il nome che assegni alla campagna.</li>
-                            <li>Il template di messaggio selezionato.</li>
-                            <li>L'elenco dei destinatari (numeri di telefono e nomi) che carichi o selezioni.</li>
-                        </ul>
-                    </li>
-                </ul>
+        <h2>2. Dati Personali Raccolti e Finalità del Trattamento</h2>
+        <p>
+            Raccogliamo diverse categorie di dati personali al solo fine di fornire, mantenere e migliorare il Servizio. La base giuridica del trattamento è l'esecuzione di un contratto di cui sei parte (la fornitura del Servizio da te richiesto).
+        </p>
+        <ul>
+            <li>
+                <strong>Dati di Connessione all'Account WhatsApp:</strong> Quando un amministratore collega un account WhatsApp Business alla piattaforma, riceviamo da Meta le informazioni necessarie per operare, tra cui: l'ID del WhatsApp Business Account (WABA ID), l'ID del numero di telefono collegato e il nome dell'azienda associato. Queste informazioni sono indispensabili per autenticare le richieste verso le API di Meta per tuo conto.
+            </li>
+            <li>
+                <strong>Dati delle Campagne:</strong> Quando crei una campagna, raccogliamo il nome che le assegni, il template di messaggio selezionato e l'elenco dei destinatari (numeri di telefono, nomi e parametri variabili) che carichi tramite file (CSV/Excel). Questi dati sono utilizzati esclusivamente per l'invio della campagna specifica.
+            </li>
+            <li>
+                <strong>Dati relativi all'invio dei messaggi:</strong> Per ogni messaggio inviato, conserviamo un ID univoco fornito da Meta e lo stato di consegna (es. 'inviato', 'consegnato', 'fallito'). Questo ci permette di fornire un report sull'andamento della campagna.
+            </li>
+            <li>
+                <strong>Dati per la gestione degli Opt-Out:</strong> In conformità con le policy di WhatsApp, se un destinatario risponde a un messaggio con la parola "STOP", il suo numero di telefono viene registrato in una nostra "blocklist" interna. Questo garantisce che il numero non venga più contattato in campagne future, come richiesto dalla normativa e dalle condizioni di servizio di Meta.
+            </li>
+        </ul>
 
-                <h2 class="h4 mt-5 mb-3">3. Finalità del Trattamento</h2>
-                <p>Utilizziamo i dati raccolti per le seguenti finalità:</p>
-                <ul>
-                    <li><strong>Fornitura del Servizio:</strong> Per permetterti di collegare il tuo account WhatsApp e inviare campagne di messaggistica ai destinatari da te specificati.</li>
-                    <li><strong>Sicurezza e Manutenzione:</strong> Per garantire la sicurezza della piattaforma e per la manutenzione tecnica. Il token di accesso viene memorizzato in formato crittografato per proteggerlo da accessi non autorizzati.</li>
-                    <li><strong>Supporto Utente:</strong> Per assisterti in caso di problemi tecnici o domande relative al Servizio.</li>
-                </ul>
-                <p>La base giuridica del trattamento è l'esecuzione di un contratto di cui sei parte (la fornitura del Servizio richiesto).</p>
+        <h2>3. Condivisione e Trasferimento dei Dati</h2>
+        <p>
+            <strong>Non vendiamo, cediamo o condividiamo i tuoi dati personali con terze parti per scopi di marketing.</strong>
+        </p>
+        <p>
+            I dati dei destinatari e il contenuto dei messaggi vengono condivisi unicamente con <strong>Meta Platforms, Inc.</strong> (la società madre di WhatsApp) in quanto fornitore tecnico indispensabile per l'erogazione del Servizio. Ogni invio di messaggio costituisce una comunicazione tecnica con le loro API. Il trattamento dei dati da parte di Meta è regolato dalla loro <a href="https://www.whatsapp.com/legal/business-policy" target="_blank" rel="noopener noreferrer">policy commerciale</a> e dalla loro <a href="https://www.whatsapp.com/legal/business-data-processing-terms" target="_blank" rel="noopener noreferrer">informativa sul trattamento dei dati</a>.
+        </p>
 
-                <h2 class="h4 mt-5 mb-3">4. Condivisione dei Dati</h2>
-                <p>Non vendiamo né condividiamo i tuoi dati personali con terze parti per scopi di marketing.</p>
-                <p>I tuoi dati vengono condivisi solo con <strong>Meta Platforms, Inc.</strong> (Facebook/WhatsApp) come parte integrante del funzionamento del Servizio. Ogni invio di messaggio richiede una comunicazione con le loro API, utilizzando il tuo token di accesso e gli ID associati al tuo account.</p>
+        <h2>4. Sicurezza e Conservazione dei Dati</h2>
+        <p>
+            Adottiamo misure di sicurezza tecniche e organizzative per proteggere i tuoi dati da accessi non autorizzati. Le credenziali sensibili, come i token di accesso, sono conservate in formato <strong>crittografato</strong> nel nostro database.
+        </p>
+        <p>
+            I dati relativi alle tue campagne e ai destinatari vengono conservati per il tempo strettamente necessario a fornirti i report di avanzamento e per lo storico delle attività. I file caricati con le liste di destinatari vengono utilizzati per la validazione e l'invio, e poi archiviati in modo sicuro.
+        </p>
 
-                <h2 class="h4 mt-5 mb-3">5. Sicurezza e Conservazione dei Dati</h2>
-                <p>Adottiamo misure di sicurezza tecniche e organizzative per proteggere i tuoi dati. In particolare, i token di accesso, che sono credenziali sensibili, vengono conservati nel nostro database in formato <strong>crittografato</strong>.</p>
-                <p>I dati relativi al tuo account e alle tue campagne vengono conservati per tutto il tempo in cui il tuo account è attivo sulla nostra piattaforma. Puoi richiedere la rimozione del tuo account in qualsiasi momento.</p>
+        <h2>5. I Tuoi Diritti in materia di Privacy</h2>
+        <p>
+            In qualità di interessato, hai il diritto di:
+        </p>
+        <ul>
+            <li><strong>Accedere</strong> ai tuoi dati personali che conserviamo.</li>
+            <li>Chiedere la <strong>rettifica</strong> di dati inesatti.</li>
+            <li>Chiedere la <strong>cancellazione (diritto all'oblio)</strong> dei tuoi dati, fatte salve le necessità di conservazione per obblighi di legge.</li>
+            <li><strong>Opporti</strong> al trattamento o chiederne la <strong>limitazione</strong>, nei casi previsti dalla legge (GDPR).</li>
+        </ul>
+        <p>
+            Per esercitare i tuoi diritti, puoi contattarci all'indirizzo email fornito al punto 1.
+        </p>
 
-                <h2 class="h4 mt-5 mb-3">6. I Tuoi Diritti</h2>
-                <p>In qualità di interessato, hai il diritto di:</p>
-                <ul>
-                    <li><strong>Accedere</strong> ai tuoi dati personali che conserviamo.</li>
-                    <li>Chiedere la <strong>rettifica</strong> di dati inesatti.</li>
-                    <li>Chiedere la <strong>cancellazione</strong> del tuo account e dei dati associati. Puoi farlo autonomamente dalla sezione "Account WhatsApp" della piattaforma.</li>
-                    <li><strong>Opporti</strong> al trattamento o chiederne la limitazione, nei casi previsti dalla legge.</li>
-                </ul>
-                <p>Per esercitare i tuoi diritti, puoi contattarci all'indirizzo email fornito al punto 1.</p>
-
-                <h2 class="h4 mt-5 mb-3">7. Modifiche a questa Informativa</h2>
-                <p>Potremmo aggiornare questa informativa sulla privacy di tanto in tanto per riflettere, ad esempio, modifiche alle nostre pratiche o per altre ragioni operative, legali o normative. Ti invitiamo a consultare periodicamente questa pagina.</p>
-
-                <div class="text-center mt-5">
-                    <a href="{{ url()->previous(route('campaigns.create')) }}" class="btn btn-secondary">Torna alla pagina precedente</a>
-                </div>
-            </div>
-        </div>
+        <h2>6. Modifiche a questa Informativa</h2>
+        <p>
+            Potremmo aggiornare questa informativa sulla privacy di tanto in tanto per riflettere, ad esempio, modifiche alle nostre pratiche o per altre ragioni operative, legali o normative. Ti invitiamo a consultare periodicamente questa pagina per eventuali aggiornamenti.
+        </p>
     </div>
 </body>
 </html>
-
