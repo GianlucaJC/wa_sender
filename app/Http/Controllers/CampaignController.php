@@ -46,7 +46,8 @@ class CampaignController extends Controller
                     $url = "https://graph.facebook.com/{$apiVersion}/{$wabaId}/message_templates";
                     // Filtriamo per ottenere solo i template approvati, che sono gli unici utilizzabili
                     $response = Http::withToken($token)->get($url, [
-                        'fields' => 'name,status,language,components', // Chiediamo anche i components e la lingua
+                        // Aggiungiamo 'category' per mostrare al revisore la tipologia di template
+                        'fields' => 'name,status,language,components,category', 
                         'status' => 'APPROVED',
                     ]);
                     $response->throw();

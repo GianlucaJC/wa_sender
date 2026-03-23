@@ -35,7 +35,7 @@ class TemplateController extends Controller
                 $token = config('services.meta_whatsapp.system_user_token');
                 $url = "https://graph.facebook.com/{$apiVersion}/{$account->waba_id}/message_templates";
                 $response = Http::withToken($token)
-                    ->get($url, ['fields' => 'name,status,category,language']);
+                    ->get($url, ['fields' => 'name,status,category,language,components']);
 
                 $response->throw();
 
