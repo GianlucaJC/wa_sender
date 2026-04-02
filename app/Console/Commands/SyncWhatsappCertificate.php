@@ -50,37 +50,23 @@ class SyncWhatsappCertificate extends Command
             return Command::FAILURE;
         }
 
-        // --- Passaggio 1: Scarica i certificati disponibili ---
-        $this->line("Sto scaricando i certificati per il WABA ID: {$wabaId}...");
+        // --- Passaggio 1: Chiedi all'utente quale nome visualizzato applicare ---
+        $this->info("Per applicare un nome visualizzato, è necessario che sia stato precedentemente approvato da Meta per il WABA ID: {$wabaId}.");
+        $this->info("Il nome visualizzato verrà applicato al numero: {$account->phone_number_display}.");
 
         try {
-            $response = Http::withToken($token)->get("https://graph.facebook.com/{$apiVersion}/{$wabaId}/certificates");
+            $chosenName = $this->ask('Inserisci il nome visualizzato approvato che vuoi applicare (es. "Nome Azienda S.r.l.")');
 
-            if ($response->failed()) {
-                $error = $response->json('error');
-                $this->error("Errore API durante il recupero dei certificati: ({$error['code']}) {$error['message']}");
-                $this->warn("Assicurati che il tuo System User Token abbia il permesso 'whatsapp_business_management'.");
+            if (empty($chosenName)) {
+                $this->error('Il nome visualizzato non può essere vuoto.');
                 return Command::FAILURE;
             }
 
-            $certificates = $response->json('data');
-
-            if (empty($certificates)) {
-                $this->warn('Nessun certificato disponibile per il download. Potrebbe essere necessario attendere l\'approvazione da parte di Meta.');
-                return Command::SUCCESS;
-            }
-
-            $this->info('Certificati disponibili trovati:');
-            $certChoices = collect($certificates)->pluck('display_name')->all();
-            $certMap = collect($certificates)->keyBy('display_name')->all();
-
-            // --- Passaggio 2: Chiedi all'utente quale certificato applicare ---
-            $chosenName = $this->choice(
-                'Quale nome visualizzato vuoi applicare al numero ' . $account->phone_number_display . '?',
-                $certChoices
-            );
-
-            $chosenCertificate = $certMap[$chosenName]['certificate'];
+            // Il "certificato" da inviare all'API è in realtà il nome visualizzato stesso,
+            // una volta che è stato approvato da Meta.
+            // Non c'è un endpoint per "scaricare" una lista di certificati in questo contesto,
+            // ma si usa direttamente il nome approvato.
+            $chosenCertificate = $chosenName;
 
             // --- Passaggio 3: Applica il certificato scelto ---
             $this->line("Sto applicando il certificato per '{$chosenName}' al numero ID: {$phoneNumberId}...");

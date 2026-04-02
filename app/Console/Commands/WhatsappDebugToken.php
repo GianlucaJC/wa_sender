@@ -13,7 +13,7 @@ class WhatsappDebugToken extends Command
     public function handle(): int
     {
         $systemUserToken = config('services.meta_whatsapp.system_user_token');
-        $appId = "1261212119438653";
+        $appId = config('services.meta_whatsapp.client_id');
         $appSecret = config('services.meta_whatsapp.app_secret');
 
         if (!$systemUserToken) {

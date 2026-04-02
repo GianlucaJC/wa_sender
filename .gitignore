@@ -3,7 +3,6 @@
 /public/hot
 /storage
 /public/storage
-
 # Dependencies
 /vendor
 /node_modules
