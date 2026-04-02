@@ -168,8 +168,9 @@ class SendWhatsAppMessage implements ShouldQueue
             if ($response->failed()) {
                 $errorData = $response->json();
                 $errorMessage = $errorData['error']['message'] ?? 'Unknown API error';
-                Log::error("Failed to send WhatsApp message to {$this->recipient->phone_number}. Status: {$response->status()}. Error: {$errorMessage}", $errorData);
-                $this->handleFailure($errorMessage, new \Exception("WhatsApp API Error: {$errorMessage}"));
+                $exceptionMessage = "WhatsApp API Error for recipient #{$this->recipient->id}: {$errorMessage}";
+                Log::error("Failed to send WhatsApp message to {$this->recipient->phone_number} (Recipient ID: {$this->recipient->id}). Status: {$response->status()}. Error: {$errorMessage}", ['response_body' => $errorData]);
+                $this->handleFailure($errorMessage, new \Exception($exceptionMessage));
                 return;
             }
 

@@ -19,7 +19,7 @@ return [
     'meta_whatsapp' => [
         'system_user_token' => env('META_SYSTEM_USER_TOKEN'), // Token del System User del Portfolio
         'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'), // ID numero di telefono di default (se necessario)
-        'api_version' => 'v18.0', // Puoi aggiornare la versione API qui
+        'api_version' => 'v20.0', // Aggiornato a una versione più recente e stabile
         'client_id' => env('META_WHATSAPP_CLIENT_ID'), // ID dell'App Facebook (per l'SDK JS)
         'config_id' => env('META_WHATSAPP_CONFIG_ID'), // ID della configurazione "Embedded Signup"
         'app_secret' => env('META_APP_SECRET'), 
