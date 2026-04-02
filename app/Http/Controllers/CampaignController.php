@@ -41,7 +41,7 @@ class CampaignController extends Controller
                     // Con il modello Portfolio, il token è quello del System User, centralizzato.
                     $token = config('services.meta_whatsapp.system_user_token');
                     $wabaId = $account->waba_id;
-                    $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+                    $apiVersion = config('services.meta_whatsapp.api_version', 'v20.0');
 
                     $url = "https://graph.facebook.com/{$apiVersion}/{$wabaId}/message_templates";
                     // Filtriamo per ottenere solo i template approvati, che sono gli unici utilizzabili
@@ -666,7 +666,7 @@ class CampaignController extends Controller
 
             $token = config('services.meta_whatsapp.system_user_token');
             $phoneNumberId = $account->phone_number_id;
-            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v20.0');
 
             if (!$token || !$phoneNumberId) {
                 throw new \Exception('Credenziali non valide per l\'account selezionato.');
@@ -1064,7 +1064,7 @@ class CampaignController extends Controller
         try {
             $token = config('services.meta_whatsapp.system_user_token');
             $phoneNumberId = $account->phone_number_id;
-            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v20.0');
             $url = "https://graph.facebook.com/{$apiVersion}/{$phoneNumberId}/media";
 
             $response = Http::withToken($token)
@@ -1102,7 +1102,7 @@ class CampaignController extends Controller
             }
 
             $token = config('services.meta_whatsapp.system_user_token');
-            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v20.0');
             $url = "https://graph.facebook.com/{$apiVersion}/{$account->waba_id}/message_templates";
             $response = Http::withToken($token)->get($url, ['name' => $templateName, 'fields' => 'components']);
             $response->throw();

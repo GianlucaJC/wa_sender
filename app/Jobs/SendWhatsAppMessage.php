@@ -155,7 +155,7 @@ class SendWhatsAppMessage implements ShouldQueue
 
             // L'ID del numero di telefono, invece, è specifico dell'account selezionato.
             $phoneNumberId = $account->phone_number_id;
-            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v20.0');
 
             if (empty($token) || empty($phoneNumberId)) {
                 throw new \Exception('Credenziali dell\'account (token o ID telefono) mancanti.');

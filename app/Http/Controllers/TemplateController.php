@@ -23,7 +23,7 @@ class TemplateController extends Controller
     {
         $account = $this->getCurrentAccount();
 
-        $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+        $apiVersion = config('services.meta_whatsapp.api_version', 'v20.0');
         $templates = [];
         $error = null;
 
@@ -114,7 +114,7 @@ class TemplateController extends Controller
         }
 
         try {
-            $apiVersion = config('services.meta_whatsapp.api_version', 'v18.0');
+            $apiVersion = config('services.meta_whatsapp.api_version', 'v20.0');
             // Con il modello Portfolio, il token è quello del System User, centralizzato.
             $token = config('services.meta_whatsapp.system_user_token');
             $wabaId = $account->waba_id;
