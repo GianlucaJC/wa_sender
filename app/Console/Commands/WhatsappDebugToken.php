@@ -13,7 +13,7 @@ class WhatsappDebugToken extends Command
     public function handle(): int
     {
         $systemUserToken = config('services.meta_whatsapp.system_user_token');
-        $appId = config('services.meta_whatsapp.client_id');
+        $appId = "1261212119438653";
         $appSecret = config('services.meta_whatsapp.app_secret');
 
         if (!$systemUserToken) {
@@ -21,8 +21,12 @@ class WhatsappDebugToken extends Command
             return Command::FAILURE;
         }
 
-        if (!$appId || !$appSecret) {
-            $this->error('META_WHATSAPP_CLIENT_ID o META_APP_SECRET non sono impostati nel file .env. Sono necessari per ispezionare il token.');
+        if (!$appId) {
+            $this->error('La variabile META_WHATSAPP_CLIENT_ID non è impostata nel file .env. È necessaria per ispezionare il token.');
+            return Command::FAILURE;
+        }
+        if (!$appSecret) {
+            $this->error('La variabile META_APP_SECRET non è impostata nel file .env. È necessaria per ispezionare il token.');
             return Command::FAILURE;
         }
 
@@ -95,5 +99,3 @@ class WhatsappDebugToken extends Command
         return Command::SUCCESS;
     }
 }
-
-
