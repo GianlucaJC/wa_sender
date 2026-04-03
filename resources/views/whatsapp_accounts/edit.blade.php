@@ -13,8 +13,8 @@
 
     <div class="card bg-light mb-4">
         <div class="card-body d-flex justify-content-start align-items-center gap-3">
-            <h6 class="card-title mb-0">Link Rapidi Meta:</h6>
-            
+            <h6 class="card-title mb-0">Link Rapidi Meta:</h6><a href="https://business.facebook.com/latest/settings/whatsapp_account/?business_id={{ $account->waba_id }}&selected_asset_id={{ $account->phone_number_id }}&selected_asset_type=whatsapp-business-account" target="_blank" class="btn btn-outline-secondary btn-sm"><i class="bi bi-gear"></i> Impostazioni Account WhatsApp</a>
+
             <a href="https://business.facebook.com/wa/manage/phone-numbers/?business_id={{ $account->waba_id }}" target="_blank" class="btn btn-outline-secondary btn-sm"><i class="bi bi-person-badge"></i> Gestisci Numeri e Profilo</a>
           
             <a href="https://developers.facebook.com/apps/" target="_blank" class="btn btn-outline-secondary btn-sm"><i class="bi bi-window-desktop"></i> Dashboard App</a>
