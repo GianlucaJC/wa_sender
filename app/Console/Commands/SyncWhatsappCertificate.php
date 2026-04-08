@@ -62,17 +62,22 @@ class SyncWhatsappCertificate extends Command
                 return Command::FAILURE;
             }
 
-            // Il "certificato" da inviare all'API è in realtà il nome visualizzato stesso,
-            // una volta che è stato approvato da Meta.
-            // Non c'è un endpoint per "scaricare" una lista di certificati in questo contesto,
-            // ma si usa direttamente il nome approvato.
-            $chosenCertificate = $chosenName;
+            // Chiediamo il nome visualizzato per riferimento, ma il "certificato" da inviare all'API
+            // è la stringa lunga fornita da Meta.
+            $certificateString = $this->ask('Inserisci la stringa del certificato che hai ricevuto da Meta (quella lunga)');
+
+            if (empty($certificateString)) {
+                $this->error('La stringa del certificato non può essere vuota.');
+                return Command::FAILURE;
+            }
 
             // --- Passaggio 3: Applica il certificato scelto ---
             $this->line("Sto applicando il certificato per '{$chosenName}' al numero ID: {$phoneNumberId}...");
 
             $postResponse = Http::withToken($token)->post("https://graph.facebook.com/{$apiVersion}/{$phoneNumberId}", [
-                'certificate' => $chosenCertificate,
+                // Meta si aspetta la stringa del certificato, non il nome visualizzato.
+                // Il nome visualizzato è già stato approvato e associato a questa stringa.
+                'certificate' => $certificateString,
             ]);
 
             if ($postResponse->failed()) {
