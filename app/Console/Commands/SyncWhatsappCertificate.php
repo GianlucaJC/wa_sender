@@ -50,6 +50,42 @@ class SyncWhatsappCertificate extends Command
             return Command::FAILURE;
         }
 
+        // --- NUOVO: Verifica le autorizzazioni del System User Token ---
+        $appId = config('services.meta_whatsapp.client_id');
+        $appSecret = config('services.meta_whatsapp.app_secret');
+
+        if (!$appId || !$appSecret) {
+            $this->error('META_WHATSAPP_CLIENT_ID o META_APP_SECRET non sono impostati nel file .env. Sono necessari per verificare il token.');
+            return Command::FAILURE;
+        }
+
+        $this->info('Verificando le autorizzazioni del System User Token...');
+        $appToken = "{$appId}|{$appSecret}";
+        $debugResponse = Http::get('https://graph.facebook.com/debug_token', [
+            'input_token' => $token,
+            'access_token' => $appToken,
+        ]);
+
+        if ($debugResponse->failed()) {
+            $this->error('Errore durante la verifica del System User Token: ' . $debugResponse->body());
+            return Command::FAILURE;
+        }
+
+        $debugData = $debugResponse->json('data');
+        if (isset($debugData['error'])) {
+            $this->error("Il System User Token non è valido o è scaduto. Messaggio: " . $debugData['error']['message']);
+            return Command::FAILURE;
+        }
+
+        $scopes = $debugData['scopes'] ?? [];
+        if (!in_array('whatsapp_business_management', $scopes)) {
+            $this->error("Il System User Token MANCA del permesso 'whatsapp_business_management'. Questo è necessario per gestire i numeri di telefono.");
+            $this->line("Assicurati che l'utente di sistema sia associato come 'Admin' all'asset 'Account WhatsApp' specifico nel Business Manager e rigenera il token.");
+            return Command::FAILURE;
+        }
+        $this->info('System User Token verificato e ha i permessi necessari.');
+        // --- FINE NUOVO: Verifica autorizzazioni ---
+
         // --- Passaggio 1: Chiedi all'utente quale nome visualizzato applicare ---
         $this->info("Per applicare un nome visualizzato, è necessario che sia stato precedentemente approvato da Meta per il WABA ID: {$wabaId}.");
         $this->info("Il nome visualizzato verrà applicato al numero: {$account->phone_number_display}.");
@@ -82,7 +118,10 @@ class SyncWhatsappCertificate extends Command
 
             if ($postResponse->failed()) {
                 $error = $postResponse->json('error');
-                $this->error("Errore API durante l'applicazione del certificato: ({$error['code']}) {$error['message']}");
+                $errorMessage = $error['message'] ?? 'Errore sconosciuto';
+                $errorCode = $error['code'] ?? 'N/A';
+                $this->error("Errore API durante l'applicazione del certificato: ({$errorCode}) {$errorMessage}");
+                Log::error("Failed to apply certificate for account {$accountId}. Response: " . $postResponse->body());
                 return Command::FAILURE;
             }
 
@@ -91,7 +130,8 @@ class SyncWhatsappCertificate extends Command
                 $this->info("Il nome visualizzato '{$chosenName}' è ora attivo per il numero {$account->phone_number_display}.");
                 $this->warn("Potrebbero essere necessari alcuni minuti prima che la modifica sia visibile a tutti.");
             } else {
-                $this->error('L\'API di Meta non ha confermato il successo dell\'operazione.');
+                $this->error('L\'API di Meta non ha confermato il successo dell\'operazione. Controlla la risposta API per maggiori dettagli.');
+                Log::error("Meta API did not confirm success for certificate application for account {$accountId}. Response: " . $postResponse->body());
             }
 
             return Command::SUCCESS;
